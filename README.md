@@ -78,7 +78,7 @@ The five built-in shader styles are original GLSL written for LyricDeck; the *Li
 
 LyricDeck is free and open source. If it makes your listening better, you can support its development here:
 
-- [Your donation link here]
+- [Donate with PayPal](https://www.paypal.com/donate?hosted_button_id=LS8RG7GS6GWGU)
 
 ## License
 
