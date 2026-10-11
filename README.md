@@ -6,6 +6,14 @@ LyricDeck turns any TV, projector, or spare monitor into a stunning synced-lyric
 
 **Live demo:** https://plexlyrics.tailf8ec44.ts.net/
 
+## Screenshots
+
+![LyricDeck with karaoke-style lyric highlighting](screenshots/karaoke.png)
+*Karaoke-style highlighting keeps the current line front and center.*
+
+![LyricDeck with a pop-up trivia fact](screenshots/popup-fact.png)
+*Pop-up trivia drops song facts during the music.*
+
 ## Why LyricDeck
 
 Most lyrics displays are an afterthought — a static panel in the corner of an app. LyricDeck is the *show*. Point it at your music library and you get a full-screen experience built for listening rooms, parties, and streams: every line lands on the beat, the visuals breathe with the music, and when friends come over, they grab the queue from their own phones.
