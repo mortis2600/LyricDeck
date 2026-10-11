@@ -54,6 +54,20 @@ LyricDeck is free and open source. If it makes your listening better, you can su
 
 - [Your donation link here]
 
+## Acknowledgments
+
+LyricDeck stands on the shoulders of open source. Thanks to:
+
+- [Express](https://expressjs.com/) (MIT) — web server
+- [Axios](https://axios-http.com/) (MIT) — HTTP client
+- [dotenv](https://github.com/motdotla/dotenv) (BSD-2-Clause) — environment config
+- [Kuroshiro](https://github.com/hexenq/kuroshiro) (MIT) and [kuroshiro-analyzer-kuromoji](https://github.com/hexenq/kuroshiro-analyzer-kuromoji) (MIT) — Japanese romaji conversion
+- [Color Thief](https://lokeshdhakar.com/projects/color-thief/) (MIT) — album-art color extraction
+- [LRCLib](https://lrclib.net/) — synced lyrics API
+- [Genius](https://genius.com/) — song annotations API
+
+The built-in "MilkDrop" visualizer preset is an original shader written for LyricDeck, named in homage to Ryan Geiss's classic MilkDrop visualizer — it contains no MilkDrop code.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
