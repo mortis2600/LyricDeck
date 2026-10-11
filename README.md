@@ -14,7 +14,7 @@ It started as a Plex-first project and grew into a three-source jukebox with the
 
 ## Features
 
-- **Real MilkDrop visualizers, live.** Flip on *Live* mode and genuine MilkDrop presets (via Butterchurn) react in real time to your microphone — your room becomes the visualizer input. No audio file access needed.
+- **Real MilkDrop visualizers, live.** Flip on *Live* mode and genuine MilkDrop presets (via Butterchurn) react in real time to your microphone — your room becomes the visualizer input. No audio file access needed. Note: browsers only allow mic access on secure connections, so *Live* mode needs HTTPS (or localhost) to work.
 - **Five built-in animated shader styles** (Geiss, MilkDrop, Nebula, Rings, Void) with album-art color theming when you just want motion behind the lyrics.
 - **Karaoke party mode** (`/party`): a big-screen display with a huge current line and upcoming-line preview, a shared song queue guests can join with a session code, and **duet parts** you can assign per singer.
 - **Phone remote** (`/remote`): guests search the library and queue songs without touching your setup.
