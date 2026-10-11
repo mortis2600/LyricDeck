@@ -33,18 +33,53 @@
     #singer-b-btn.singer-on { background: var(--part-b); color: #000; }
     #singer-badge { font-weight: 800; }
 
-    /* Track header + main-display-style lyric stage */
+    /* Track header */
     #duet-track { text-align: center; margin: 8px 0 4px 0; }
     #duet-title { font-size: 1.3rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #duet-artist { color: var(--accent-color); font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #duet-stage { text-align: center; padding: 24px 8px; min-height: 30vh; display: flex; flex-direction: column; justify-content: center; }
-    #duet-current { font-size: 2rem; font-weight: 800; line-height: 1.3; text-shadow: 0 2px 12px rgba(0,0,0,0.9); transition: opacity 0.25s ease, color 0.25s ease; }
-    #duet-next { margin-top: 18px; font-size: 1.15rem; font-weight: 500; line-height: 1.35; opacity: 0.45; }
-    #duet-current.dimmed { opacity: 0.28; font-weight: 500; }
-    #duet-current.mine-a { color: var(--part-a); }
-    #duet-current.mine-b { color: var(--part-b); }
-    #duet-current.mine-both { color: #fff; }
     #duet-waiting { text-align: center; padding: 40px 0; }
+
+    /* ---- Mirrored from public/index.html: the main-display lyric presentation ---- */
+    #lyrics-container {
+        max-width: 1200px; width: 95%; margin: 0 auto; line-height: 1.8; flex: 1;
+        overflow-y: scroll; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none;
+        mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+        text-align: center;
+    }
+    #lyrics-container::-webkit-scrollbar { display: none; }
+    #lyrics-inner { padding: 30vh 0; }
+
+    .lyric-line {
+        transition: transform 0.3s ease, opacity 0.3s ease, color 0.3s ease;
+        color: rgba(255, 255, 255, 0.4);
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 0 0 3px rgba(0, 0, 0, 0.9);
+        transform-origin: center;
+        padding: 10px 0;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    .lyric-main { display: block; }
+
+    .lyric-line.highlight[data-part="A"] { color: #22d3ee; }
+    .lyric-line.highlight[data-part="B"] { color: #f472b6; }
+    .lyric-line[data-part="A"] .lyric-main { color: rgba(34,211,238,0.6); }
+    .lyric-line[data-part="B"] .lyric-main { color: rgba(244,114,182,0.6); }
+    .lyric-line.highlight {
+        transform: scale(1.15); font-weight: 800; color: #fff;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.95);
+        background: rgba(0, 0, 0, 0.42);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        border-radius: 14px;
+        padding-left: 28px; padding-right: 28px;
+        display: inline-block;
+    }
+    /* ---- Phone adaptations (main display is a big screen) ---- */
+    #lyrics-container { height: 52vh; flex: none; }
+    #lyrics-container .lyric-line { white-space: normal; }
+    #lyrics-container .lyric-main { font-size: 1.35rem; }
 
     /* GET READY banner */
     #duet-getready { display: none; background: linear-gradient(135deg, rgba(29,185,84,0.25), rgba(29,185,84,0.08));
@@ -99,11 +134,7 @@
 
         <div id="duet-getready"><div class="gr-label">GET READY</div><div class="gr-line" id="duet-gr-line"></div></div>
 
-        <div id="duet-stage">
-            <div id="duet-waiting" class="empty">Start playing something on Plex or Jellyfin</div>
-            <div id="duet-current" style="display:none;"></div>
-            <div id="duet-next" style="display:none;"></div>
-        </div>
+        <div id="lyrics-container"><div id="lyrics-inner"><div id="duet-waiting" class="empty">Start playing something on Plex or Jellyfin</div></div></div>
 
         <div class="row">
             <button class="ghost" onclick="toggleEditor()" id="edit-toggle" style="width:100%;">Edit parts</button>
@@ -126,6 +157,8 @@
     let duetEnabled = false, duetParts = {}, duetTrackKey = '', duetParsed = [];
     let duetTimes = [], duetOffsetMs = 0, duetFetchedAt = 0, duetPlaying = false;
     let mySinger = localStorage.getItem('duet_singer') || 'A';
+    let lastBuiltKey = '';
+    let lastActiveIdx = -2;
 
     function parseLRC(lrcText) {
         const lines = (lrcText || '').split('\n'), result = [], times = [];
@@ -156,6 +189,7 @@
         mySinger = s;
         localStorage.setItem('duet_singer', s);
         syncSingerBtns();
+        lastActiveIdx = -2; // force re-highlight for the new singer
         renderLive();
     }
 
@@ -175,6 +209,25 @@
         return parts;
     }
 
+    function partOf(i) { return duetParts[i] || 'both'; }
+    function isMyPart(i) { const p = partOf(i); return p === 'both' || p === mySinger; }
+    function lyricListKey() { return duetTrackKey + '|' + JSON.stringify(duetParts); }
+
+    // Build the full scrolling lyric list (mirrors index.html's #lyrics-inner).
+    // Rebuilt whenever the track or the part assignments change.
+    function buildLyricList() {
+        const inner = document.getElementById('lyrics-inner');
+        if (!duetParsed.length) {
+            inner.innerHTML = '<div id="duet-waiting" class="empty">Start playing something on Plex or Jellyfin</div>';
+        } else {
+            inner.innerHTML = duetParsed.map((text, i) =>
+                `<div class="lyric-line" id="line-${i}" data-part="${partOf(i)}"><span class="lyric-main">${escapeHtml(text)}</span></div>`
+            ).join('');
+        }
+        lastBuiltKey = lyricListKey();
+        lastActiveIdx = -2; // force re-highlight + re-scroll
+    }
+
     async function refreshDuet() {
         try {
             const res = await fetch('/api/party/state');
@@ -183,7 +236,6 @@
             if (key !== duetTrackKey) {
                 duetTrackKey = key;
                 duetParsed = data.playing && data.syncedLyrics ? parseLRC(data.syncedLyrics) : [];
-                if (document.getElementById('duet-editor').classList.contains('open')) renderEditor();
             }
             duetOffsetMs = data.offsetMs || 0;
             duetFetchedAt = data.fetchedAt || Date.now();
@@ -206,12 +258,11 @@
                 duetEnabled = false;
                 duetParts = {};
             }
+            if (lyricListKey() !== lastBuiltKey) buildLyricList();
+            if (document.getElementById('duet-editor').classList.contains('open')) renderEditor();
             renderLive();
         } catch (e) {}
     }
-
-    function partOf(i) { return duetParts[i] || 'both'; }
-    function isMyPart(i) { const p = partOf(i); return p === 'both' || p === mySinger; }
 
     function duetNowMs() {
         if (!duetPlaying) return duetOffsetMs;
@@ -228,30 +279,17 @@
 
     function renderLive() {
         const idx = duetCurrentIndex();
-        const cur = document.getElementById('duet-current');
-        const nxt = document.getElementById('duet-next');
-        const waiting = document.getElementById('duet-waiting');
-        if (idx >= 0 && duetParsed.length) {
-            waiting.style.display = 'none';
-            cur.style.display = '';
-            nxt.style.display = '';
-            const part = partOf(idx);
-            const mine = isMyPart(idx);
-            cur.innerText = duetParsed[idx];
-            cur.className = mine ? (part === 'A' ? 'mine-a' : part === 'B' ? 'mine-b' : 'mine-both') : 'dimmed';
-            const ni = idx + 1;
-            if (ni < duetParsed.length) {
-                nxt.innerText = duetParsed[ni];
-                const nPart = partOf(ni);
-                nxt.style.color = nPart === 'A' ? 'var(--part-a)' : nPart === 'B' ? 'var(--part-b)' : '';
-                nxt.style.opacity = isMyPart(ni) ? '0.55' : '0.3';
-            } else {
-                nxt.innerText = '';
+        if (idx !== lastActiveIdx) {
+            document.querySelectorAll('#lyrics-inner .lyric-line').forEach(el => el.classList.remove('highlight'));
+            const activeEl = document.getElementById(`line-${idx}`);
+            if (activeEl) {
+                // follow-along scroll (same math as index.html's render loop)
+                const container = document.getElementById('lyrics-container');
+                container.scrollTo({ top: activeEl.offsetTop - (container.offsetHeight / 2) + (activeEl.offsetHeight / 2), behavior: 'smooth' });
+                // highlight ONLY the singer's own part (or 'both'); the other singer's lines stay dim
+                if (isMyPart(idx)) activeEl.classList.add('highlight');
             }
-        } else {
-            waiting.style.display = '';
-            cur.style.display = 'none';
-            nxt.style.display = 'none';
+            lastActiveIdx = idx;
         }
         // GET READY: my next line within 8s while the current line isn't mine
         const gr = document.getElementById('duet-getready');
