@@ -26,10 +26,11 @@ It started as a Plex-first project and grew into a three-source jukebox with the
 - **Five built-in animated shader styles** (Geiss, MilkDrop, Nebula, Rings, Void) with album-art color theming when you just want motion behind the lyrics.
 - **Karaoke party mode** (`/party`): a big-screen display with a huge current line and upcoming-line preview, a shared song queue guests can join with a session code, and **duet parts** you can assign per singer.
 - **Phone remote** (`/remote`): guests search the library and queue songs without touching your setup.
+- **Duet view** (`/duet`): singers join with the session code and get a personalized lyric display styled like the main screen — only their part lights up in their color while other parts dim, with a GET READY banner counting down to their next line. A collapsible part editor lets you tap-to-assign A/B parts per line.
 - **OBS overlay** (`/overlay`): transparent now-playing + lyrics overlay for streamers.
 - **Three playback sources**: Plex (primary), Jellyfin, and Spotify.
 - **Synced lyrics** from LRCLib with manual search and per-song overrides when the wrong lyrics load.
-- **Romaji toggle** for Japanese lyrics (kuroshiro), **pop-up trivia** from Genius annotations, gapless prefetch of upcoming tracks, and persistent lyric corrections that survive restarts.
+- **Romaji toggle** for Japanese lyrics (kuroshiro) and Korean romanization (Revised Romanization), **pop-up trivia** from Genius annotations, gapless prefetch of upcoming tracks, and persistent lyric corrections that survive restarts.
 - **Help page** (`/help`) so guests can onboard themselves.
 
 ## Quick start
@@ -64,6 +65,7 @@ User data (lyric overrides, sync offsets, party queue) is stored in `data/persis
 | `/`        | Main lyrics display                                               |
 | `/party`   | Karaoke party mode (big screen)                                   |
 | `/remote`  | Phone remote for guests                                           |
+| `/duet`    | Singer's duet view (personalized parts + GET READY cues)          |
 | `/overlay` | Transparent OBS overlay                                           |
 | `/help`    | Guest help page                                                   |
 

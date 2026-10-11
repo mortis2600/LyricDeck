@@ -46,6 +46,33 @@ try {
         .catch(e => console.error("[Kuroshiro] Init error:", e.message));
 } catch(e) {}
 
+// ---------- Korean romanization (Revised Romanization, compact tables) ----------
+// Hangul syllable U+AC00..U+D7A3 -> choseong/jungseong/jongseong -> RR.
+// Simple per-syllable mapping (no cross-syllable assimilation rules).
+const KO_CHO  = ['g','kk','n','d','tt','r','m','b','pp','s','ss','','j','jj','ch','k','t','p','h'];
+const KO_JUNG = ['a','ae','ya','yae','eo','e','yeo','ye','o','wa','wae','oe','yo','u','wo','we','wi','yu','eu','ui','i'];
+const KO_JONG = ['','k','k','ks','n','nj','nh','t','l','lk','lm','lb','ls','lt','lp','lh','m','p','ps','t','t','ng','t','t','k','t','p','t'];
+function romanizeKorean(text) {
+    let out = '';
+    for (const ch of text) {
+        const code = ch.codePointAt(0);
+        if (code >= 0xAC00 && code <= 0xD7A3) {
+            const s = code - 0xAC00;
+            const t = s % 28, v = Math.floor(s / 28) % 21, l = Math.floor(s / 588);
+            out += KO_CHO[l] + KO_JUNG[v] + KO_JONG[t];
+        } else {
+            out += ch;
+        }
+    }
+    return out;
+}
+// Per-line script detection: Korean -> RR, Japanese -> kuroshiro, else unchanged.
+function lineScript(t) {
+    if (/[\uAC00-\uD7A3]/.test(t)) return 'ko';
+    if (/[\u3041-\u30FA\uFF66-\uFF9F]/.test(t) || /[\u4E00-\u9FFF]/.test(t)) return 'ja';
+    return 'other';
+}
+
 const trackCache = new Map();
 const romajiCache = new Map();
 let manualOverrides = persisted.manualOverrides || {};
@@ -262,6 +289,7 @@ function getSpotifyRedirectUri(req) {
 app.get('/party', (req, res) => res.sendFile(path.join(__dirname, 'public', 'party.html')));
 app.get('/help', (req, res) => res.sendFile(path.join(__dirname, 'public', 'help.html')));
 app.get('/remote', (req, res) => res.sendFile(path.join(__dirname, 'public', 'remote.html')));
+app.get('/duet', (req, res) => res.sendFile(path.join(__dirname, 'public', 'duet.html')));
 app.get('/overlay', (req, res) => res.sendFile(path.join(__dirname, 'public', 'overlay.html')));
 
 // Which login providers are actually configured (hide dead buttons).
@@ -413,18 +441,27 @@ app.post('/api/party/queue/clear', (req, res) => {
     res.json({ success: true, queue: [] });
 });
 
-// ---------- Romaji (kuroshiro) ----------
+// ---------- Romaji (kuroshiro for Japanese, Revised Romanization for Korean) ----------
 app.post('/api/romaji', async (req, res) => {
     const { text, texts, trackId } = req.body || {};
-    if (!kuroshiroReady) return res.status(503).json({ error: 'Romaji engine not ready' });
     const list = Array.isArray(texts) ? texts : (text ? [text] : []);
     if (list.length === 0) return res.status(400).json({ error: 'Missing text' });
+    const batch = list.slice(0, 200);
+    const scripts = batch.map(lineScript);
+    // Only Japanese lines need kuroshiro; Korean/other lines convert without it.
+    if (scripts.includes('ja') && !kuroshiroReady) {
+        return res.status(503).json({ error: 'Romaji engine not ready' });
+    }
     try {
         const out = [];
-        for (const t of list.slice(0, 200)) {
+        for (let i = 0; i < batch.length; i++) {
+            const t = batch[i];
             const key = trackId ? `${trackId}::${t}` : t;
             if (romajiCache.has(key)) { out.push(romajiCache.get(key)); continue; }
-            const r = await kuroshiro.convert(t, { to: 'romaji', mode: 'spaced' });
+            let r;
+            if (scripts[i] === 'ko') r = romanizeKorean(t);
+            else if (scripts[i] === 'ja') r = await kuroshiro.convert(t, { to: 'romaji', mode: 'spaced' });
+            else r = t;
             if (romajiCache.size > 2000) romajiCache.delete(romajiCache.keys().next().value);
             romajiCache.set(key, r);
             out.push(r);

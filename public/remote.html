@@ -27,25 +27,7 @@
     .item button { padding: 8px 12px; font-size: 0.85rem; flex-shrink: 0; }
     .empty { color: rgba(255,255,255,0.4); font-size: 0.95rem; padding: 8px 0; }
     #who { width: 100%; margin-top: 12px; }
-    .duet-line { padding: 10px 12px; border-radius: 8px; margin-bottom: 4px; background: #141414; cursor: pointer; border-left: 4px solid transparent; }
-    .duet-line .part-tag { float: right; font-size: 0.75rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; }
-    .duet-line[data-part="A"] { border-left-color: #22d3ee; }
-    .duet-line[data-part="A"] .part-tag { background: rgba(34,211,238,0.2); color: #22d3ee; }
-    .duet-line[data-part="B"] { border-left-color: #f472b6; }
-    .duet-line[data-part="B"] .part-tag { background: rgba(244,114,182,0.2); color: #f472b6; }
-    .duet-line[data-part="both"] .part-tag { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); }
-    .duet-line.mine { background: #1a1a1a; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15); }
-    .singer-on { background: var(--accent-color) !important; color: #000 !important; }
-    #duet-lyrics { max-height: 50vh; overflow-y: auto; }
-    .duet-line.now { outline: 2px solid #fff; }
-    .duet-line.now.mine { outline-color: var(--accent-color); background: #1e2a1e; }
-    #duet-getready { display: none; background: linear-gradient(135deg, rgba(29,185,84,0.25), rgba(29,185,84,0.08));
-        border: 1px solid var(--accent-color); border-radius: 12px; padding: 12px 16px; margin-bottom: 10px;
-        animation: grPulse 1s ease-in-out infinite; }
-    #duet-getready.show { display: block; }
-    #duet-getready .gr-label { font-weight: 900; letter-spacing: 2px; color: var(--accent-color); font-size: 0.85rem; }
-    #duet-getready .gr-line { font-weight: 700; font-size: 1.05rem; margin-top: 4px; }
-    @keyframes grPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+
 </style>
 </head>
 <body>
@@ -61,6 +43,8 @@
         <div class="row"><button onclick="joinSession()" style="width:100%;">Join</button></div>
         <div id="join-error" class="empty" style="color:#ff8080; display:none;"></div>
     </div>
+
+    <div style="margin-bottom:16px; font-size:0.95rem;"><a href="/duet" style="color:var(--accent-color); text-decoration:none;">&#127908; Singing along? Open the duet view &rarr;</a></div>
     <div id="linked-bar" style="display:none; margin-bottom:12px; font-size:0.9rem; color:rgba(255,255,255,0.6);">
         Joined as <b id="linked-name" style="color:#fff;"></b> <span id="linked-singer" style="color:var(--accent-color);"></span>
         <a href="#" onclick="leaveSession(); return false;" style="color:rgba(255,255,255,0.4); margin-left:8px;">leave</a>
@@ -72,17 +56,7 @@
         <div id="np-artist"></div>
     </div>
 
-    <h2>Duet Mode</h2>
-    <div class="row" style="margin-top:0;" id="singer-row" style="display:none;">
-        <button id="singer-a-btn" class="ghost" onclick="setSinger('A')">I sing A</button>
-        <button id="singer-b-btn" class="ghost" onclick="setSinger('B')">I sing B</button>
-    </div>
-    <div id="duet-getready"><div class="gr-label">GET READY</div><div class="gr-line" id="duet-gr-line"></div></div>
-    <div id="duet-lyrics" style="display:none; margin-top:12px;"></div>
-    <div class="row" id="duet-clear-row" style="display:none;">
-        <button class="ghost" onclick="autoSplit(true)">Auto-split parts</button>
-        <button class="danger ghost" onclick="clearDuetParts()">Clear</button>
-    </div>
+
 
     <h2>Search and Queue</h2>
     <input id="who" placeholder="Your name (for the queue)">
@@ -178,184 +152,7 @@
         refreshState();
     }
 
-    let duetEnabled = false, duetParts = {}, duetTrackKey = '', duetParsed = [];
-    let duetTimes = [], duetOffsetMs = 0, duetFetchedAt = 0, duetPlaying = false;
-    let mySinger = localStorage.getItem('duet_singer') || 'A';
 
-    function parseLRC(lrcText) {
-        const lines = (lrcText || '').split('\n'), result = [], times = [];
-        const regex = /\[(\d{2,}):(\d{2}\.\d{2,3})\](.*)/;
-        for (const line of lines) {
-            const m = line.match(regex);
-            if (m) {
-                const text = m[3].trim();
-                if (text) {
-                    result.push(text);
-                    times.push((parseInt(m[1], 10) * 60 + parseFloat(m[2])) * 1000);
-                }
-            }
-        }
-        duetTimes = times;
-        return result;
-    }
-
-    function syncSingerBtns() {
-        document.getElementById('singer-a-btn').classList.toggle('singer-on', mySinger === 'A');
-        document.getElementById('singer-b-btn').classList.toggle('singer-on', mySinger === 'B');
-    }
-
-    function setSinger(s) {
-        mySinger = s;
-        localStorage.setItem('duet_singer', s);
-        syncSingerBtns();
-        renderDuetLyrics();
-    }
-
-    function detectPartsAuto(texts) {
-        const isParen = t => /^\(.*\)$/.test((t || '').trim());
-        const parts = {};
-        let pc = 0;
-        texts.forEach((t, i) => { if (isParen(t)) { parts[i] = 'B'; pc++; } });
-        if (texts.length < 6 || pc < 2 || pc / texts.length > 0.7) return {};
-        return parts;
-    }
-
-    async function refreshDuet() {
-        try {
-            const res = await fetch('/api/party/state');
-            const data = await res.json();
-            duetTrackKey = data.playing ? `${data.artist} - ${data.title}` : '';
-            duetParsed = data.playing && data.syncedLyrics ? parseLRC(data.syncedLyrics) : [];
-            duetOffsetMs = data.offsetMs || 0;
-            duetFetchedAt = data.fetchedAt || Date.now();
-            duetPlaying = !!data.playing && data.playerState !== 'paused';
-            if (duetTrackKey) {
-                const dr = await fetch('/api/duet/state?trackKey=' + encodeURIComponent(duetTrackKey));
-                const dj = await dr.json();
-                duetEnabled = dj.enabled;
-                duetParts = dj.parts || {};
-            } else { duetParts = {}; }
-            renderDuetLyrics();
-        } catch (e) {}
-    }
-
-    function renderDuetLyrics() {
-        const box = document.getElementById('duet-lyrics');
-        const clearRow = document.getElementById('duet-clear-row');
-        const singerRow = document.getElementById('singer-row');
-        syncSingerBtns();
-        // automatic: merge server parts with auto-detected parts
-        const autoParts = detectPartsAuto(duetParsed);
-        const merged = Object.assign({}, autoParts, duetParts);
-        const hasParts = Object.keys(merged).length > 0;
-        if (!hasParts || !duetParsed.length) {
-            box.style.display = 'none';
-            clearRow.style.display = 'none';
-            singerRow.style.display = 'none';
-            document.getElementById('duet-getready').classList.remove('show');
-            box.innerHTML = '';
-            return;
-        }
-        duetParts = merged;
-        box.style.display = '';
-        clearRow.style.display = '';
-        singerRow.style.display = '';
-        box.innerHTML = '<div class="empty" style="margin-bottom:8px;">Tap a line to assign it: both &rarr; A &rarr; B</div>' + duetParsed.map((text, i) => {
-            const part = duetParts[i] || 'both';
-            const mine = part === 'both' || part === mySinger;
-            return `<div class="duet-line${mine ? ' mine' : ''}" data-part="${part}" onclick="cyclePart(${i})">
-                <span class="part-tag">${part === 'both' ? 'BOTH' : part}</span>${escapeHtml(text)}</div>`;
-        }).join('');
-    }
-
-    function duetNowMs() {
-        if (!duetPlaying) return duetOffsetMs;
-        return duetOffsetMs + (Date.now() - duetFetchedAt);
-    }
-    function duetCurrentIndex() {
-        const now = duetNowMs();
-        let idx = -1;
-        for (let i = 0; i < duetTimes.length; i++) {
-            if (now >= duetTimes[i]) idx = i; else break;
-        }
-        return idx;
-    }
-    function isMyPart(i) {
-        const part = duetParts[i] || 'both';
-        return part === 'both' || part === mySinger;
-    }
-    function updateDuetLive() {
-        if (!duetParsed.length || Object.keys(duetParts).length === 0) {
-            document.getElementById('duet-getready').classList.remove('show');
-            return;
-        }
-        const idx = duetCurrentIndex();
-        const box = document.getElementById('duet-lyrics');
-        box.querySelectorAll('.duet-line').forEach((el, i) => el.classList.toggle('now', i === idx));
-        const curEl = box.querySelector('.duet-line.now');
-        if (curEl) curEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        // get-ready: my next line within 8s while current isn't mine
-        const gr = document.getElementById('duet-getready');
-        const now = duetNowMs();
-        let showGr = false, grText = '', grIn = 0;
-        if (idx >= 0 && !isMyPart(idx)) {
-            for (let i = idx + 1; i < duetTimes.length; i++) {
-                if (isMyPart(i)) {
-                    const waitMs = duetTimes[i] - now;
-                    if (waitMs > 0 && waitMs <= 8000) { showGr = true; grText = duetParsed[i]; grIn = waitMs; }
-                    break;
-                }
-            }
-        }
-        gr.classList.toggle('show', showGr);
-        if (showGr) document.getElementById('duet-gr-line').innerText = `"${grText}" — in ${Math.ceil(grIn / 1000)}s`;
-    }
-    setInterval(updateDuetLive, 1000);
-
-    async function cyclePart(i) {
-        const cur = duetParts[i] || 'both';
-        const next = cur === 'both' ? 'A' : cur === 'A' ? 'B' : 'both';
-        await fetch('/api/duet/assign', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackKey: duetTrackKey, index: i, part: next })
-        });
-        refreshDuet();
-    }
-
-    function autoSplitHeuristic(texts) {
-        const isParen = t => /^\(.*\)$/.test(t.trim());
-        const parenIdx = [];
-        texts.forEach((t, i) => { if (isParen(t)) parenIdx.push(i); });
-        if (texts.length < 6 || parenIdx.length < 2) return null;
-        if (parenIdx.length / texts.length > 0.7) return null;
-        const parts = {};
-        parenIdx.forEach(i => parts[i] = 'B');
-        return parts;
-    }
-    async function autoSplit(manual) {
-        if (!duetTrackKey || !duetParsed.length) return;
-        const parts = autoSplitHeuristic(duetParsed);
-        if (!parts) {
-            if (manual) alert('No clear two-part pattern found in these lyrics.');
-            return false;
-        }
-        await fetch('/api/duet/setparts', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackKey: duetTrackKey, parts })
-        });
-        refreshDuet();
-        return true;
-    }
-    async function clearDuetParts() {
-        if (!confirm('Clear all part assignments for this song?')) return;
-        await fetch('/api/duet/clear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackKey: duetTrackKey })
-        });
-        refreshDuet();
-    }
 
     async function joinSession() {
         const code = document.getElementById('join-code').value.trim();
@@ -371,7 +168,7 @@
             const data = await res.json();
             if (!res.ok) { err.innerText = data.error || 'Could not join.'; err.style.display = ''; return; }
             localStorage.setItem('linked_name', data.name);
-            if (data.singer) setSinger(data.singer);
+            if (data.singer) localStorage.setItem('duet_singer', data.singer);
             document.getElementById('who').value = data.name;
             syncJoinUI();
         } catch (e) { err.innerText = 'Could not reach the server.'; err.style.display = ''; }
@@ -398,8 +195,6 @@
 
     refreshState();
     setInterval(refreshState, 3000);
-    refreshDuet();
-    setInterval(refreshDuet, 3000);
 </script>
 </body>
 </html>
