@@ -45,6 +45,7 @@
         #left-toggles, #right-toggles { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; pointer-events: auto; }
         #top-bar.sleeping { opacity: 0; }
         #top-bar.sleeping #left-toggles, #top-bar.sleeping #right-toggles { pointer-events: none; }
+        
 
         .util-btn { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; backdrop-filter: blur(5px); transition: 0.2s; white-space: nowrap; }
         .util-btn:hover { background: rgba(255,255,255,0.2); }
@@ -331,6 +332,7 @@
         </div>
         <div id="right-toggles">
             <button class="util-btn inactive" onclick="logoutSession()" title="Log out and disconnect the current session">Logout</button>
+            
             <button class="util-btn" onclick="toggleFullScreen()" title="Toggle fullscreen mode">&#x26F6; Fullscreen</button>
             <button class="util-btn" onclick="window.open('/help', '_blank')" title="Help and documentation">?</button>
         </div>
