@@ -2,6 +2,8 @@
 
 A synced-lyrics display for your music. Connect Plex, Jellyfin, or Spotify and get a beautiful full-screen lyrics view with karaoke-style highlighting, pop-up trivia, and audio-reactive visualizers.
 
+**Live demo:** https://plexlyrics.tailf8ec44.ts.net/
+
 ## Features
 
 - **Three playback sources**: Plex, Jellyfin, and Spotify (Plex is the primary focus)
