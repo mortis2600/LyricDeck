@@ -26,7 +26,6 @@
     .item .a { font-size: 0.85rem; color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .item button { padding: 8px 12px; font-size: 0.85rem; flex-shrink: 0; }
     .empty { color: rgba(255,255,255,0.4); font-size: 0.95rem; padding: 8px 0; }
-    #who { width: 100%; margin-top: 12px; }
 
 </style>
 </head>
@@ -56,23 +55,6 @@
         <div id="np-artist"></div>
     </div>
 
-
-
-    <h2>Search and Queue</h2>
-    <input id="who" placeholder="Your name (for the queue)">
-    <div class="row">
-        <input id="q-artist" placeholder="Artist">
-        <input id="q-title" placeholder="Title">
-        <button onclick="search()">Search</button>
-    </div>
-    <div id="results" style="margin-top:12px;"></div>
-
-    <h2>Party Queue <span id="q-count"></span></h2>
-    <div id="queue"></div>
-    <div class="row">
-        <button class="danger ghost" onclick="clearQueue()" style="width:100%;">Clear queue</button>
-    </div>
-
 <script>
     async function refreshState() {
         try {
@@ -80,79 +62,12 @@
             const data = await res.json();
             document.getElementById('np-title').innerText = data.playing ? (data.title || '') : 'Nothing playing';
             document.getElementById('np-artist').innerText = data.playing ? (data.artist || '') : '';
-            const q = data.queue || [];
-            document.getElementById('q-count').innerText = q.length ? `(${q.length})` : '';
-            const qEl = document.getElementById('queue');
-            qEl.innerHTML = q.length === 0
-                ? '<div class="empty">Queue is empty. Search above to add songs.</div>'
-                : q.map((item, i) => `
-                    <div class="item">
-                        <div class="meta">
-                            <div class="t">${escapeHtml(item.title)}</div>
-                            <div class="a">${escapeHtml(item.artist)}${item.addedBy ? ' &middot; ' + escapeHtml(item.addedBy) : ''}</div>
-                        </div>
-                        <button class="ghost" onclick="removeAt(${i})">Remove</button>
-                    </div>`).join('');
         } catch (e) {}
     }
 
     function escapeHtml(s) {
         return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
-
-    async function search() {
-        const artist = document.getElementById('q-artist').value.trim();
-        const title = document.getElementById('q-title').value.trim();
-        const box = document.getElementById('results');
-        if (!artist && !title) { box.innerHTML = '<div class="empty">Enter an artist or title.</div>'; return; }
-        box.innerHTML = '<div class="empty">Searching...</div>';
-        try {
-            const res = await fetch(`/api/search-lyrics?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
-            const data = await res.json();
-            if (!Array.isArray(data) || data.length === 0) {
-                box.innerHTML = '<div class="empty">No synced lyrics found.</div>';
-                return;
-            }
-            box.innerHTML = data.slice(0, 10).map(item => `
-                <div class="item">
-                    <div class="meta">
-                        <div class="t">${escapeHtml(item.trackName)}</div>
-                        <div class="a">${escapeHtml(item.artistName)} &middot; ${escapeHtml(item.albumName || 'Unknown Album')}</div>
-                    </div>
-                    <button onclick="queueSong(${item.id}, '${escapeHtml(item.trackName).replace(/'/g, "\\'")}', '${escapeHtml(item.artistName).replace(/'/g, "\\'")}')">Queue</button>
-                </div>`).join('');
-            box.dataset.results = JSON.stringify(data.slice(0, 10));
-        } catch (e) {
-            box.innerHTML = '<div class="empty">Search failed.</div>';
-        }
-    }
-
-    async function queueSong(id, title, artist) {
-        const addedBy = document.getElementById('who').value.trim() || 'guest';
-        await fetch('/api/party/queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, artist, lrcId: id, addedBy })
-        });
-        refreshState();
-    }
-
-    async function removeAt(i) {
-        await fetch('/api/party/queue/remove', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ index: i })
-        });
-        refreshState();
-    }
-
-    async function clearQueue() {
-        if (!confirm('Clear the whole party queue?')) return;
-        await fetch('/api/party/queue/clear', { method: 'POST' });
-        refreshState();
-    }
-
-
 
     async function joinSession() {
         const code = document.getElementById('join-code').value.trim();
@@ -169,7 +84,6 @@
             if (!res.ok) { err.innerText = data.error || 'Could not join.'; err.style.display = ''; return; }
             localStorage.setItem('linked_name', data.name);
             if (data.singer) localStorage.setItem('duet_singer', data.singer);
-            document.getElementById('who').value = data.name;
             syncJoinUI();
         } catch (e) { err.innerText = 'Could not reach the server.'; err.style.display = ''; }
     }
@@ -188,7 +102,6 @@
         document.getElementById('linked-bar').style.display = name ? '' : 'none';
         if (name) {
             document.getElementById('linked-name').innerText = name;
-            document.getElementById('who').value = name;
         }
     }
     syncJoinUI();
