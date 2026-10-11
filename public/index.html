@@ -24,6 +24,13 @@
             pointer-events: none;
             background-color: #000;
         }
+        #milkdrop-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; opacity: 0; transition: opacity 1.5s ease;
+            pointer-events: none;
+            background-color: #000;
+            filter: brightness(0.55) saturate(0.9);
+        }
 
         @keyframes ambientDrift {
             0% { transform: scale(1) translate(0, 0) rotate(0deg); }
@@ -45,9 +52,20 @@
         .premium-btn { background: rgba(29, 185, 84, 0.2); border-color: var(--accent-color); color: var(--accent-color); font-weight: 700; }
         .premium-btn:hover { background: rgba(29, 185, 84, 0.4); }
 
-        .toggle-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .toggle-group { display: flex; flex-direction: row; align-items: center; gap: 8px; }
         #sync-controls-wrapper { display: flex; justify-content: center; width: 100%; transition: opacity 0.3s; }
         #sync-controls { display: flex; align-items: center; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); gap: 3px; backdrop-filter: blur(5px); }
+        #sync-controls .sync-btn {
+            max-width: 0; opacity: 0; padding-left: 0; padding-right: 0;
+            overflow: hidden; white-space: nowrap; border: 0;
+            transition: max-width 0.25s ease, opacity 0.25s ease, padding 0.25s ease;
+        }
+        #sync-controls-wrapper:hover #sync-controls .sync-btn,
+        #sync-controls-wrapper:focus-within #sync-controls .sync-btn {
+            max-width: 48px; opacity: 1; padding: 3px 5px;
+        }
+        #sync-display { cursor: pointer; font-weight: 700; padding: 3px 6px; }
+        #sync-controls-wrapper { cursor: default; }
         .sync-btn { background: rgba(255,255,255,0.05); border: 1px solid transparent; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 0.75rem; font-weight: 600; padding: 3px 5px; border-radius: 6px; transition: 0.2s; }
         .sync-btn:hover { background: rgba(255,255,255,0.2); color: var(--accent-color); border-color: rgba(255,255,255,0.3); }
         #sync-display { font-size: 0.8rem; width: 48px; text-align: center; font-variant-numeric: tabular-nums; color: #fff; font-weight: 600; margin: 0 2px; cursor: pointer; transition: color 0.2s; }
@@ -82,6 +100,7 @@
         .lyric-line {
             transition: transform 0.3s ease, opacity 0.3s ease, color 0.3s ease;
             color: rgba(255, 255, 255, 0.4);
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 0 0 3px rgba(0, 0, 0, 0.9);
             transform-origin: center;
             padding: 10px 0;
             font-weight: 500;
@@ -91,9 +110,19 @@
         .lyric-main { display: block; }
         .lyric-subtext { display: block; font-weight: 400; margin-top: 4px; opacity: 0.75; letter-spacing: 0.5px; }
 
+        .lyric-line.highlight[data-part="A"] { color: #22d3ee; }
+        .lyric-line.highlight[data-part="B"] { color: #f472b6; }
+        .lyric-line[data-part="A"] .lyric-main { color: rgba(34,211,238,0.6); }
+        .lyric-line[data-part="B"] .lyric-main { color: rgba(244,114,182,0.6); }
         .lyric-line.highlight {
             transform: scale(1.15); font-weight: 800; color: #fff;
-            text-shadow: 0px 4px 15px rgba(255, 255, 255, 0.1);
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.95);
+            background: rgba(0, 0, 0, 0.42);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            border-radius: 14px;
+            padding-left: 28px; padding-right: 28px;
+            display: inline-block;
         }
 
         .lyric-line.scat-line { display: flex; justify-content: center; align-items: center; width: 100%; }
@@ -131,6 +160,23 @@
         #get-ready-label { color: var(--accent-color); font-weight: 900; font-size: 1.1rem; letter-spacing: 3px; text-transform: uppercase; white-space: nowrap; }
         #countdown-track { flex: 1; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
         #countdown-fill { width: 0%; height: 100%; background: var(--accent-color); box-shadow: 0 0 10px var(--accent-color); transition: width 0.1s linear; }
+
+        #countdown-overlay {
+            position: fixed; inset: 0; z-index: 40; display: none;
+            align-items: center; justify-content: center; pointer-events: none;
+            background: radial-gradient(circle, rgba(0,0,0,0.55) 0%, transparent 70%);
+        }
+        #countdown-overlay.active { display: flex; }
+        .cd-ring-wrap { position: relative; width: min(46vmin, 380px); height: min(46vmin, 380px); animation: cdPulse 1s ease-in-out infinite; }
+        .cd-ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .cd-ring-bg { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 10; }
+        .cd-ring-fill { fill: none; stroke: var(--accent-color); stroke-width: 10; stroke-linecap: round;
+            stroke-dasharray: 565.5; stroke-dashoffset: 565.5; filter: drop-shadow(0 0 12px var(--accent-color)); }
+        .cd-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            text-align: center; font-weight: 900; font-size: min(6vmin, 3rem); letter-spacing: 4px; line-height: 1.2;
+            color: #fff; animation: cdGlow 1s ease-in-out infinite alternate; }
+        @keyframes cdPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+        @keyframes cdGlow { from { text-shadow: 0 0 12px var(--accent-color); } to { text-shadow: 0 0 32px var(--accent-color), 0 0 72px var(--accent-color); } }
 
         #paused-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 10, 10, 0.85); backdrop-filter: blur(12px); display: none; align-items: center; justify-content: center; z-index: 50; flex-direction: column; gap: 15px; opacity: 0; transition: opacity 0.3s ease; }
         #paused-overlay.show { display: flex; opacity: 1; }
@@ -219,18 +265,42 @@
             .search-bar-row { flex-direction: column; align-items: stretch; gap: 8px; }
             .search-bar-row button { width: 100%; padding: 12px; margin-top: 5px; }
         }
+
+        /* Overlay mode: minimal transparent display for OBS */
+        #overlay-display { display: none; }
+        body.overlay-mode { background: transparent !important; }
+        body.overlay-mode #bg-art,
+        body.overlay-mode #visualizer-canvas,
+        body.overlay-mode #milkdrop-canvas,
+        body.overlay-mode #ui-layer,
+        body.overlay-mode #top-bar,
+        body.overlay-mode #paused-overlay,
+        body.overlay-mode #modal-overlay,
+        body.overlay-mode #popup-video-bubble,
+        body.overlay-mode #wiki-links-widget,
+        body.overlay-mode #up-next-widget,
+        body.overlay-mode #interlude-music-note,
+        body.overlay-mode #get-ready-banner { display: none !important; }
+        body.overlay-mode #overlay-display {
+            display: flex; position: fixed; bottom: 8vh; left: 0; width: 100%;
+            flex-direction: column; align-items: flex-start; padding: 0 4vw;
+            z-index: 1000; pointer-events: none;
+        }
+        #overlay-track { font-size: 1.1rem; color: rgba(255,255,255,0.75); font-weight: 600; text-shadow: 0 2px 8px #000; margin-bottom: 6px; }
+        #overlay-line { font-size: min(3rem, 5.5vw); font-weight: 800; color: #fff; text-shadow: 0 2px 12px #000, 0 0 24px rgba(0,0,0,0.8); line-height: 1.25; }
     </style>
 </head>
 <body>
     <canvas id="visualizer-canvas"></canvas>
+    <canvas id="milkdrop-canvas"></canvas>
     <div id="bg-art"></div>
     <div id="top-bar" class="sleeping">
         <div id="left-toggles">
-            <select id="session-selector" class="util-btn" style="display: none;" onchange="changeTargetClient(this.value)"></select>
+            <select id="session-selector" class="util-btn" style="display: none;" onchange="changeTargetClient(this.value)" title="Choose which player session to follow"></select>
 
             <div class="toggle-group">
-                <button class="util-btn" onclick="toggleHighlight()" id="highlight-btn">Highlight: ON</button>
-                <div id="sync-controls-wrapper">
+                <button class="util-btn" onclick="toggleHighlight()" id="highlight-btn" title="Highlight the currently playing lyric line">Highlight: ON</button>
+                <div id="sync-controls-wrapper" title="Hover for fine sync tuning">
                     <div id="sync-controls">
                         <button class="sync-btn" onclick="adjustSync(-1000)" title="-1 Second">-1s</button>
                         <button class="sync-btn" onclick="adjustSync(-100)" title="-0.1 Seconds">-.1s</button>
@@ -243,15 +313,26 @@
                 </div>
             </div>
 
-            <button class="util-btn" onclick="toggleScroll()" id="scroll-btn">Auto-Scroll: ON</button>
-            <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn">Trivia: ON</button>
-            <button class="util-btn inactive" onclick="cycleVisualizer()" id="vis-btn">Vis: OFF</button>
-            <button class="util-btn inactive" onclick="toggleCleanMode()" id="clean-btn">Explicit</button>
-            <button class="util-btn inactive" onclick="toggleRomaji()" id="romaji-btn">Romaji: OFF</button>
+            <button class="util-btn" onclick="toggleScroll()" id="scroll-btn" title="Auto-scroll to follow the current lyric line">Auto-Scroll: ON</button>
+            <button class="util-btn" onclick="cycleCountdownStyle()" id="countdown-btn" title="Switch the pre-lyrics countdown style">Countdown: Bar</button>
+            <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn" title="Show pop-up music trivia during instrumental breaks">Trivia: ON</button>
+            <button class="util-btn inactive" onclick="cycleShaderVis()" id="vis-btn" title="Cycle shader visualizer backgrounds">Vis: OFF</button>
+            <button class="util-btn inactive" onclick="toggleLiveVis()" id="live-btn" title="Real MilkDrop presets reacting live to mic audio">Live: OFF</button>
+            <span id="live-controls" style="display:none;">
+                <button class="util-btn" onclick="cycleLiveStyle()" id="md-style-btn" title="Switch Live visual style">Style: MilkDrop</button>
+                <button class="util-btn" onclick="nextMilkDropPreset()" id="md-next-btn" title="Skip to the next MilkDrop preset">Next &gt;</button>
+                <button class="util-btn" onclick="toggleMdAutoCycle()" id="md-cycle-btn" title="Automatically change presets every 22 seconds">Cycle: ON</button>
+                <button class="util-btn inactive" onclick="toggleMdLock()" id="md-lock-btn" title="Freeze on this preset and remember it">Lock: OFF</button>
+                <button class="util-btn" onclick="banMilkDropPreset()" id="md-ban-btn" title="Too intense - never show this preset again">Ban</button>
+            </span>
+            <button class="util-btn inactive" onclick="toggleOBSMode()" id="overlay-btn" title="Minimal transparent lyric display for OBS streaming">OBS: OFF</button>
+            <button class="util-btn inactive" onclick="toggleCleanMode()" id="clean-btn" title="Filter explicit words from lyrics">Explicit</button>
+            <button class="util-btn inactive" onclick="toggleRomaji()" id="romaji-btn" title="Show Japanese lyrics in romanized text (romaji)">Romaji: OFF</button>
         </div>
         <div id="right-toggles">
-            <button class="util-btn inactive" onclick="logoutSession()">Logout</button>
-            <button class="util-btn" onclick="toggleFullScreen()">&#x26F6; Fullscreen</button>
+            <button class="util-btn inactive" onclick="logoutSession()" title="Log out and disconnect the current session">Logout</button>
+            <button class="util-btn" onclick="toggleFullScreen()" title="Toggle fullscreen mode">&#x26F6; Fullscreen</button>
+            <button class="util-btn" onclick="window.open('/help', '_blank')" title="Help and documentation">?</button>
         </div>
     </div>
 
@@ -260,9 +341,9 @@
             <div class="auth-card">
                 <h1 style="margin:0 0 5px 0; font-size:2.4rem; letter-spacing:1px;">LyricDeck</h1>
                 <p style="margin:0 0 20px 0; color:rgba(255,255,255,0.6); font-size:0.95rem;">Choose your playback provider</p>
-                <button class="login-btn-spotify" onclick="loginWithSpotify()">Continue with Spotify</button>
+                <button class="login-btn-spotify" id="spotify-login-btn" onclick="loginWithSpotify()">Continue with Spotify</button>
                 <button class="login-btn-plex" onclick="loginWithPlex()">Continue with Plex</button>
-                <button class="login-btn-jellyfin" onclick="loginWithJellyfin()">Continue with Jellyfin</button>
+                <button class="login-btn-jellyfin" id="jellyfin-login-btn" onclick="loginWithJellyfin()">Continue with Jellyfin</button>
             </div>
         </div>
 
@@ -292,6 +373,15 @@
         </div>
     </div>
 
+    <div id="countdown-overlay">
+            <div class="cd-ring-wrap">
+                <svg viewBox="0 0 200 200">
+                    <circle cx="100" cy="100" r="90" class="cd-ring-bg"></circle>
+                    <circle cx="100" cy="100" r="90" class="cd-ring-fill" id="cd-ring-fill"></circle>
+                </svg>
+                <div class="cd-label">GET<br>READY</div>
+            </div>
+        </div>
     <div id="paused-overlay">
         <h1>PAUSED</h1>
         <p>Playback is currently paused</p>
@@ -334,6 +424,8 @@
         <p>Up Next</p>
         <h4 id="next-title">Loading...</h4>
     </div>
+
+    <div id="overlay-display"><div id="overlay-track"></div><div id="overlay-line"></div></div>
 
     <script>
         const CLIENT_ID = localStorage.getItem('plex_client_id') || ('lyricdeck-' + Math.random().toString(36).substring(2, 15));
@@ -393,9 +485,20 @@
 
         // WebGL Visualizers
         let gl, glProgram, timeLocation, resolutionLocation, colorLocation, startTime;
+        let bassLoc = null, midLoc = null, trebleLoc = null, beatLoc = null, mouseLoc = null, specTexLoc = null, specTex = null;
+        let mdAnalyser = null, fftScratch = null;
+        let audioLevels = { bass: 0, mid: 0, treble: 0, beat: 0 };
+        let specByteData = new Uint8Array(32);
+        let lastBeatTime = 0, beatDecay = 0;
+        let mouseTX = 0, mouseTY = 0, mouseSX = 0, mouseSY = 0;
         let glVertexShader = null, glFragShader = null, glBuffer = null;
         let animFrameId = null;
         let currentVisIndex = 0;
+        let visScale = 0.5;            // render at half res, CSS upscales (looks identical for abstract art)
+        let visLastFrame = 0;          // 30fps cap timestamp
+        let visFrames = 0;             // fps monitor counters
+        let visFpsWindow = Date.now();
+        let visAccentCache = { key: '', r: 0.11, g: 0.73, b: 0.33, lastCheck: 0 };
 
         const visualizerShaders = [
             {
@@ -472,6 +575,60 @@
                     gl_FragColor = vec4(col, 1.0);
                 }
                 `
+            },
+            {
+                name: "Nebula",
+                fs: `
+                precision mediump float;
+                uniform vec2 u_resolution;
+                uniform float u_time;
+                uniform vec3 u_color;
+                float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+                float noise(vec2 p){
+                    vec2 i = floor(p); vec2 f = fract(p);
+                    vec2 u = f*f*(3.0-2.0*f);
+                    return mix(mix(hash(i), hash(i+vec2(1.,0.)), u.x),
+                               mix(hash(i+vec2(0.,1.)), hash(i+vec2(1.,1.)), u.x), u.y);
+                }
+                void main(){
+                    vec2 uv = (gl_FragCoord.xy - 0.5*u_resolution.xy) / u_resolution.y;
+                    float t = u_time * 0.08;
+                    vec2 q = uv * 2.0;
+                    float n = noise(q + vec2(t, -t*0.7));
+                    n += 0.5 * noise(q * 2.1 - vec2(t*1.3, t*0.5));
+                    n += 0.25 * noise(q * 4.3 + vec2(-t*0.9, t*1.1));
+                    n /= 1.75;
+                    float d = length(uv);
+                    float glow = smoothstep(0.9, 0.1, d);
+                    vec3 col = mix(vec3(0.02), u_color, smoothstep(0.25, 0.85, n) * glow);
+                    col += u_color * pow(max(0.0, 1.0 - d*1.6), 2.0) * 0.35;
+                    gl_FragColor = vec4(col, 1.0);
+                }
+                `
+            },
+            {
+                name: "Rings",
+                fs: `
+                precision mediump float;
+                uniform vec2 u_resolution;
+                uniform float u_time;
+                uniform vec3 u_color;
+                void main(){
+                    vec2 uv = (gl_FragCoord.xy - 0.5*u_resolution.xy) / u_resolution.y;
+                    float t = u_time * 0.6;
+                    float d = length(uv);
+                    float rings = sin(d * 22.0 - t * 3.0) * 0.5 + 0.5;
+                    rings = pow(rings, 3.0);
+                    float pulse = 0.5 + 0.5 * sin(t * 0.8);
+                    float mask = smoothstep(1.1, 0.15, d);
+                    float wob = sin(atan(uv.y, uv.x) * 5.0 + t) * 0.03;
+                    float band = smoothstep(0.06, 0.0, abs(d + wob - 0.35 - pulse * 0.25));
+                    vec3 col = u_color * rings * mask * 0.45;
+                    col += u_color * band * (0.6 + pulse * 0.4);
+                    col += u_color * 0.08 * mask;
+                    gl_FragColor = vec4(col, 1.0);
+                }
+                `
             }
         ];
 
@@ -485,6 +642,7 @@
             if (glVertexShader) gl.deleteShader(glVertexShader);
             if (glFragShader) gl.deleteShader(glFragShader);
             if (glBuffer) gl.deleteBuffer(glBuffer);
+            if (specTex) { gl.deleteTexture(specTex); specTex = null; }
 
             const vsSource = `attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }`;
 
@@ -518,15 +676,76 @@
             timeLocation = gl.getUniformLocation(glProgram, "u_time");
             resolutionLocation = gl.getUniformLocation(glProgram, "u_resolution");
             colorLocation = gl.getUniformLocation(glProgram, "u_color");
+            bassLoc = gl.getUniformLocation(glProgram, "u_bass");
+            midLoc = gl.getUniformLocation(glProgram, "u_mid");
+            trebleLoc = gl.getUniformLocation(glProgram, "u_treble");
+            beatLoc = gl.getUniformLocation(glProgram, "u_beat");
+            mouseLoc = gl.getUniformLocation(glProgram, "u_mouse");
+            specTexLoc = gl.getUniformLocation(glProgram, "u_specTex");
+            if (specTexLoc) {
+                specTex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, specTex);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            }
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            mouseTX = (e.clientX / window.innerWidth) * 2 - 1;
+            mouseTY = -((e.clientY / window.innerHeight) * 2 - 1);
+        }, { passive: true });
+        window.addEventListener('touchmove', (e) => {
+            const t = e.touches[0];
+            if (t) { mouseTX = (t.clientX / window.innerWidth) * 2 - 1; mouseTY = -((t.clientY / window.innerHeight) * 2 - 1); }
+        }, { passive: true });
+
+        function updateAudioLevels() {
+            if (!mdAnalyser) return;
+            if (!fftScratch || fftScratch.length !== mdAnalyser.frequencyBinCount) {
+                fftScratch = new Uint8Array(mdAnalyser.frequencyBinCount);
+            }
+            mdAnalyser.getByteFrequencyData(fftScratch);
+            const n = fftScratch.length;
+            const avg = (a, b) => {
+                let sum = 0, c = 0;
+                for (let i = a; i < b && i < n; i++) { sum += fftScratch[i]; c++; }
+                return c ? sum / (c * 255) : 0;
+            };
+            audioLevels.bass = avg(1, 8);
+            audioLevels.mid = avg(8, 40);
+            audioLevels.treble = avg(40, 100);
+            const now = Date.now();
+            if (audioLevels.bass > 0.45 && now - lastBeatTime > 250) { beatDecay = 1; lastBeatTime = now; }
+            beatDecay *= 0.94;
+            audioLevels.beat = beatDecay;
+            for (let i = 0; i < 32; i++) {
+                const bin = Math.floor(Math.pow(i / 32, 1.6) * n * 0.7);
+                specByteData[i] = fftScratch[Math.min(bin, n - 1)];
+            }
         }
 
         function renderWebGL() {
-            if (currentVisIndex === 0 || !gl) return;
+            if ((!liveVisActive && currentVisIndex === 0) || !gl) return;
             const canvas = document.getElementById('visualizer-canvas');
+            const nowMs = Date.now();
 
-            if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
+            if (nowMs - visLastFrame < 33) { animFrameId = requestAnimationFrame(renderWebGL); return; }
+            visLastFrame = nowMs;
+
+            visFrames++;
+            if (nowMs - visFpsWindow > 3000) {
+                const fps = visFrames / ((nowMs - visFpsWindow) / 1000);
+                if (fps < 24 && visScale > 0.25) visScale = visScale > 0.35 ? 0.35 : 0.25;
+                visFrames = 0; visFpsWindow = nowMs;
+            }
+
+            const targetW = Math.max(2, Math.floor(window.innerWidth * visScale));
+            const targetH = Math.max(2, Math.floor(window.innerHeight * visScale));
+            if (canvas.width !== targetW || canvas.height !== targetH) {
+                canvas.width = targetW;
+                canvas.height = targetH;
                 gl.viewport(0, 0, canvas.width, canvas.height);
             }
 
@@ -550,22 +769,361 @@
                 g = c1[1] * (1.0 - smoothMix) + c2[1] * smoothMix;
                 b = c1[2] * (1.0 - smoothMix) + c2[2] * smoothMix;
             } else {
-                const style = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-                if (style.startsWith('rgb')) {
-                    const parts = style.match(/\d+/g);
-                    if (parts && parts.length >= 3) { r = parseInt(parts[0]) / 255; g = parseInt(parts[1]) / 255; b = parseInt(parts[2]) / 255; }
-                } else if (style.startsWith('#')) {
-                    const hex = style.replace('#', '');
-                    if (hex.length >= 6) { r = parseInt(hex.substring(0,2), 16) / 255; g = parseInt(hex.substring(2,4), 16) / 255; b = parseInt(hex.substring(4,6), 16) / 255; }
+                const nowA = Date.now();
+                if (nowA - visAccentCache.lastCheck > 1000) {
+                    visAccentCache.lastCheck = nowA;
+                    const style = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+                    if (style !== visAccentCache.key) {
+                        visAccentCache.key = style;
+                        if (style.startsWith('rgb')) {
+                            const parts = style.match(/\d+/g);
+                            if (parts && parts.length >= 3) { visAccentCache.r = parseInt(parts[0]) / 255; visAccentCache.g = parseInt(parts[1]) / 255; visAccentCache.b = parseInt(parts[2]) / 255; }
+                        } else if (style.startsWith('#')) {
+                            const hex = style.replace('#', '');
+                            if (hex.length >= 6) { visAccentCache.r = parseInt(hex.substring(0,2), 16) / 255; visAccentCache.g = parseInt(hex.substring(2,4), 16) / 255; visAccentCache.b = parseInt(hex.substring(4,6), 16) / 255; }
+                        }
+                    }
                 }
+                r = visAccentCache.r; g = visAccentCache.g; b = visAccentCache.b;
             }
 
             gl.uniform3f(colorLocation, isNaN(r) ? 0.11 : r, isNaN(g) ? 0.73 : g, isNaN(b) ? 0.33 : b);
+            if (liveVisActive && mdAnalyser) updateAudioLevels();
+            mouseSX += (mouseTX - mouseSX) * 0.07;
+            mouseSY += (mouseTY - mouseSY) * 0.07;
+            if (bassLoc) gl.uniform1f(bassLoc, audioLevels.bass);
+            if (midLoc) gl.uniform1f(midLoc, audioLevels.mid);
+            if (trebleLoc) gl.uniform1f(trebleLoc, audioLevels.treble);
+            if (beatLoc) gl.uniform1f(beatLoc, audioLevels.beat);
+            if (mouseLoc) gl.uniform2f(mouseLoc, mouseSX, mouseSY);
+            if (specTexLoc && specTex) {
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, specTex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 32, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, specByteData);
+                gl.uniform1i(specTexLoc, 0);
+            }
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(renderWebGL);
         }
 
-        function cycleVisualizer() {
+        let overlayMode = false;
+        let lastOverlayText = '';
+        let lastOverlayTrack = '';
+
+        function toggleOBSMode() {
+            overlayMode = !overlayMode;
+            document.body.classList.toggle('overlay-mode', overlayMode);
+            const btn = document.getElementById('overlay-btn');
+            btn.innerText = overlayMode ? 'OBS: ON' : 'OBS: OFF';
+            btn.classList.toggle('inactive', !overlayMode);
+            btn.classList.toggle('premium-btn', overlayMode);
+            if (overlayMode) updateOverlayDisplay();
+        }
+
+        function updateOverlayDisplay() {
+            if (!overlayMode) return;
+            const trackTxt = currentTitle ? `${currentArtist} - ${currentTitle}` : '';
+            if (trackTxt !== lastOverlayTrack) {
+                document.getElementById('overlay-track').innerText = trackTxt;
+                lastOverlayTrack = trackTxt;
+            }
+            const activeEl = currentActiveLine >= 0 ? document.getElementById(`line-${currentActiveLine}`) : null;
+            const mainSpan = activeEl ? activeEl.querySelector('.lyric-main') : null;
+            const txt = mainSpan ? mainSpan.innerText : '';
+            if (txt !== lastOverlayText) {
+                document.getElementById('overlay-line').innerText = txt;
+                lastOverlayText = txt;
+            }
+        }
+
+        // ---------- MilkDrop Live: real MilkDrop presets (butterchurn) driven by mic audio ----------
+        let mdVisualizer = null, mdAudioCtx = null, mdStream = null;
+        let mdRafId = null, mdPresetTimer = null, mdPresetKeys = [], mdStarting = false;
+        let liveVisActive = false, mdAutoCycle = true, mdBcp = null;
+        let liveStyle = 'milkdrop', mdCurrentPresetKey = null;
+        let mdLastFrame = 0;
+
+        function mdLoadScript(src) {
+            return new Promise((resolve, reject) => {
+                const el = document.createElement('script');
+                el.src = src; el.onload = resolve;
+                el.onerror = () => reject(new Error('Failed to load ' + src));
+                document.head.appendChild(el);
+            });
+        }
+
+        function stopMilkDrop() {
+            if (mdRafId) { cancelAnimationFrame(mdRafId); mdRafId = null; }
+            if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+            if (mdPresetTimer) { clearInterval(mdPresetTimer); mdPresetTimer = null; }
+            if (mdAudioCtx && mdAudioCtx.state === 'running') mdAudioCtx.suspend();
+            const c = document.getElementById('milkdrop-canvas');
+            if (c) c.style.opacity = '0';
+            const vc = document.getElementById('visualizer-canvas');
+            if (vc) vc.style.opacity = '0';
+        }
+
+        async function startMilkDrop() {
+            const mdCanvas = document.getElementById('milkdrop-canvas');
+            if (mdStarting) return;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('Microphone is unavailable here (insecure context).');
+            }
+            try {
+                if (!window.butterchurn) await mdLoadScript('/vendor/butterchurn.min.js');
+                if (!window.butterchurnPresets) await mdLoadScript('/vendor/butterchurnPresets.min.js');
+                // UMD builds expose different shapes: butterchurn puts the class on .default
+                const bc = (window.butterchurn && window.butterchurn.default) || window.butterchurn;
+                mdBcp = (window.butterchurnPresets && window.butterchurnPresets.default) || window.butterchurnPresets;
+                if (!bc || typeof bc.createVisualizer !== 'function') throw new Error('MilkDrop engine failed to initialize.');
+                if (!mdBcp || typeof mdBcp.getPresets !== 'function') throw new Error('MilkDrop presets failed to load.');
+                if (!mdVisualizer) {
+                    mdStarting = true;
+                    mdStream = await navigator.mediaDevices.getUserMedia({
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                    });
+                    mdAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const srcNode = mdAudioCtx.createMediaStreamSource(mdStream);
+                    mdVisualizer = bc.createVisualizer(mdAudioCtx, mdCanvas, {
+                        width: Math.max(2, Math.floor(window.innerWidth * 0.5)),
+                        height: Math.max(2, Math.floor(window.innerHeight * 0.5)),
+                        pixelRatio: 1, textureRatio: 1
+                    });
+                    mdVisualizer.connectAudio(srcNode);
+                    mdAnalyser = mdAudioCtx.createAnalyser();
+                    mdAnalyser.fftSize = 256;
+                    mdAnalyser.smoothingTimeConstant = 0.75;
+                    srcNode.connect(mdAnalyser);
+                    const allPresets = mdBcp.getPresets();
+                    mdPresetKeys = Object.keys(allPresets);
+                    const lockedKey = localStorage.getItem('milkdrop_locked_preset');
+                    mdCurrentPresetKey = (lockedKey && allPresets[lockedKey]) ? lockedKey : mdPresetKeys[Math.floor(Math.random() * mdPresetKeys.length)];
+                    if (lockedKey && allPresets[lockedKey]) mdAutoCycle = false;
+                    mdVisualizer.loadPreset(allPresets[mdCurrentPresetKey], 0);
+                    mdStarting = false;
+                } else if (mdAudioCtx.state === 'suspended') {
+                    await mdAudioCtx.resume();
+                }
+                setLiveStyle(liveStyle);
+            } catch (e) {
+                mdStarting = false;
+                console.error('[MilkDrop]', e);
+                alert('Could not start MilkDrop Live: ' + e.message + '\n\nMic access needs a secure context, use the https funnel URL instead of the local IP.');
+                liveVisActive = false;
+                const btn = document.getElementById('live-btn');
+                btn.innerText = "Live: OFF";
+                btn.classList.add('inactive');
+                btn.classList.remove('premium-btn');
+                document.getElementById('live-controls').style.display = 'none';
+            }
+        }
+
+        function restartMdCycler() {
+            if (mdPresetTimer) { clearInterval(mdPresetTimer); mdPresetTimer = null; }
+            if (liveVisActive && mdAutoCycle && mdVisualizer && mdBcp) {
+                mdPresetTimer = setInterval(() => {
+                    try { mdVisualizer.loadPreset(mdPickPreset(), 4.0); }
+                    catch (e) {}
+                }, 30000);
+            }
+        }
+
+        function nextMilkDropPreset() {
+            if (!mdVisualizer || !liveVisActive || !mdBcp) return;
+            try { mdVisualizer.loadPreset(mdPickPreset(), 2.0); }
+            catch (e) {}
+        }
+
+        function toggleMdAutoCycle() {
+            mdAutoCycle = !mdAutoCycle;
+            const btn = document.getElementById('md-cycle-btn');
+            btn.innerText = mdAutoCycle ? 'Cycle: ON' : 'Cycle: OFF';
+            btn.classList.toggle('inactive', !mdAutoCycle);
+            restartMdCycler();
+        }
+
+        function startMdLoop() {
+            const mdCanvas = document.getElementById('milkdrop-canvas');
+            mdCanvas.style.opacity = '1';
+            mdLastFrame = 0;
+            const mdLoop = () => {
+                if (!mdVisualizer || !liveVisActive || liveStyle !== 'milkdrop') return;
+                const nowMd = Date.now();
+                if (nowMd - mdLastFrame >= 42) {
+                    mdLastFrame = nowMd;
+                    try { mdVisualizer.render(); } catch (e) {}
+                }
+                mdRafId = requestAnimationFrame(mdLoop);
+            };
+            mdLoop();
+        }
+
+        const liveShaderDefs = [
+            { id: 'orbs', name: 'Orbs', fs: `
+                precision mediump float;
+                uniform vec2 u_resolution; uniform float u_time; uniform vec3 u_color;
+                uniform float u_bass; uniform float u_beat; uniform vec2 u_mouse;
+                void main(){
+                    vec2 uv = (gl_FragCoord.xy - 0.5*u_resolution.xy) / u_resolution.y;
+                    vec2 m = vec2(u_mouse.x * 0.5 * u_resolution.x / u_resolution.y, u_mouse.y * 0.5);
+                    vec3 col = vec3(0.0);
+                    for (int i = 0; i < 5; i++) {
+                        float fi = float(i);
+                        float speed = 0.6 + fi * 0.23;
+                        vec2 c = vec2(sin(u_time*speed + fi*2.1)*0.55, cos(u_time*speed*0.8 + fi*1.7)*0.4);
+                        vec2 toM = m - c; float mdd = length(toM);
+                        c -= (toM / max(mdd, 0.0001)) * smoothstep(0.55, 0.0, mdd) * 0.18;
+                        float r = 0.10 + 0.06*u_bass + 0.03*sin(u_time*3.0+fi);
+                        float d = length(uv - c);
+                        float glow = smoothstep(r, r*0.2, d);
+                        float pulse = 0.6 + 0.8*u_bass + u_beat*0.5;
+                        col += u_color * glow * pulse * (0.5 + 0.1*fi);
+                    }
+                    col += u_color * u_bass * 0.15;
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            ` },
+            { id: 'chasers', name: 'Chasers', fs: `
+                precision mediump float;
+                uniform vec2 u_resolution; uniform float u_time; uniform vec3 u_color;
+                uniform float u_bass; uniform float u_mid; uniform float u_beat; uniform vec2 u_mouse;
+                void main(){
+                    vec2 uv = (gl_FragCoord.xy - 0.5*u_resolution.xy) / u_resolution.y;
+                    vec2 m = vec2(u_mouse.x * 0.5 * u_resolution.x / u_resolution.y, u_mouse.y * 0.5);
+                    vec3 col = vec3(0.0);
+                    for (int i = 0; i < 3; i++) {
+                        float fi = float(i);
+                        float dir = mod(fi, 2.0) * 2.0 - 1.0;
+                        float a = dir * u_time * (0.8 + u_mid*1.5 + fi*0.3) + fi * 2.094;
+                        vec2 lp = vec2(cos(a), sin(a)) * 0.45;
+                        lp = mix(lp, m * 0.6, 0.28);
+                        float dd = length(uv - lp);
+                        float glow = smoothstep(0.12, 0.0, dd);
+                        col += u_color * glow * (0.7 + u_beat*0.8 + u_bass*0.4);
+                    }
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            ` },
+            { id: 'spectrum', name: 'Spectrum', fs: `
+                precision mediump float;
+                uniform vec2 u_resolution; uniform float u_time; uniform vec3 u_color;
+                uniform sampler2D u_specTex; uniform vec2 u_mouse;
+                void main(){
+                    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+                    float bar = floor(uv.x * 32.0);
+                    float f = texture2D(u_specTex, vec2((bar+0.5)/32.0, 0.5)).r;
+                    float m01x = u_mouse.x * 0.5 + 0.5;
+                    f += smoothstep(0.25, 0.0, abs(uv.x - m01x)) * 0.22;
+                    float h = 0.05 + f * 0.85;
+                    float y = abs(uv.y - 0.5) * 2.0;
+                    float on = step(y, h);
+                    float peak = smoothstep(0.025, 0.0, abs(y - h));
+                    vec3 col = u_color * on * (0.35 + f*0.9);
+                    col += vec3(1.0) * peak * 0.8;
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            ` }
+        ];
+
+        function setLiveStyle(style) {
+            if (mdRafId) { cancelAnimationFrame(mdRafId); mdRafId = null; }
+            if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+            if (mdPresetTimer) { clearInterval(mdPresetTimer); mdPresetTimer = null; }
+            document.getElementById('milkdrop-canvas').style.opacity = '0';
+            document.getElementById('visualizer-canvas').style.opacity = '0';
+            liveStyle = style;
+            const styleNames = { milkdrop: 'MilkDrop', orbs: 'Orbs', chasers: 'Chasers', spectrum: 'Spectrum' };
+            document.getElementById('md-style-btn').innerText = 'Style: ' + styleNames[style];
+            const isMd = style === 'milkdrop';
+            document.getElementById('md-next-btn').style.display = isMd ? '' : 'none';
+            document.getElementById('md-cycle-btn').style.display = isMd ? '' : 'none';
+            document.getElementById('md-lock-btn').style.display = isMd ? '' : 'none';
+            document.getElementById('md-ban-btn').style.display = isMd ? '' : 'none';
+            if (!liveVisActive) return;
+            if (isMd) {
+                restartMdCycler();
+                startMdLoop();
+            } else {
+                const def = liveShaderDefs.find(d => d.id === style);
+                if (def) {
+                    initWebGL(def.fs);
+                    document.getElementById('visualizer-canvas').style.opacity = '1';
+                    startTime = Date.now();
+                    visScale = 0.5; visFrames = 0; visFpsWindow = Date.now(); visLastFrame = 0;
+                    renderWebGL();
+                }
+            }
+        }
+
+        function cycleLiveStyle() {
+            const order = ['milkdrop', 'orbs', 'chasers', 'spectrum'];
+            setLiveStyle(order[(order.indexOf(liveStyle) + 1) % order.length]);
+        }
+
+        function mdBannedList() {
+            try { return JSON.parse(localStorage.getItem('milkdrop_banned') || '[]'); }
+            catch (e) { return []; }
+        }
+
+        function mdPickPreset() {
+            const allPresets = mdBcp.getPresets();
+            const banned = new Set(mdBannedList());
+            const pool = mdPresetKeys.filter(k => !banned.has(k));
+            const keys = pool.length ? pool : mdPresetKeys;
+            mdCurrentPresetKey = keys[Math.floor(Math.random() * keys.length)];
+            return allPresets[mdCurrentPresetKey];
+        }
+
+        function banMilkDropPreset() {
+            if (liveStyle !== 'milkdrop' || !mdCurrentPresetKey) return;
+            const banned = mdBannedList();
+            if (!banned.includes(mdCurrentPresetKey)) {
+                banned.push(mdCurrentPresetKey);
+                localStorage.setItem('milkdrop_banned', JSON.stringify(banned));
+            }
+            if (localStorage.getItem('milkdrop_locked_preset') === mdCurrentPresetKey) {
+                localStorage.removeItem('milkdrop_locked_preset');
+                syncLockUI();
+            }
+            nextMilkDropPreset();
+        }
+
+        function syncLockUI() {
+            const locked = !!localStorage.getItem('milkdrop_locked_preset');
+            const btn = document.getElementById('md-lock-btn');
+            btn.innerText = locked ? 'Lock: ON' : 'Lock: OFF';
+            btn.classList.toggle('inactive', !locked);
+            btn.classList.toggle('premium-btn', locked);
+        }
+
+        function toggleMdLock() {
+            if (liveStyle !== 'milkdrop') return;
+            if (localStorage.getItem('milkdrop_locked_preset')) {
+                localStorage.removeItem('milkdrop_locked_preset');
+                mdAutoCycle = true;
+            } else if (mdCurrentPresetKey) {
+                localStorage.setItem('milkdrop_locked_preset', mdCurrentPresetKey);
+                mdAutoCycle = false;
+            }
+            const cbtn = document.getElementById('md-cycle-btn');
+            cbtn.innerText = mdAutoCycle ? 'Cycle: ON' : 'Cycle: OFF';
+            cbtn.classList.toggle('inactive', !mdAutoCycle);
+            syncLockUI();
+            restartMdCycler();
+        }
+
+        window.addEventListener('resize', () => {
+            if (mdVisualizer && liveVisActive) {
+                try {
+                    mdVisualizer.setRendererSize(
+                        Math.max(2, Math.floor(window.innerWidth * 0.5)),
+                        Math.max(2, Math.floor(window.innerHeight * 0.5)));
+                } catch (e) {}
+            }
+        });
+
+        function cycleShaderVis() {
+            if (liveVisActive) toggleLiveVis();
             currentVisIndex++;
             if (currentVisIndex > visualizerShaders.length) currentVisIndex = 0;
 
@@ -587,7 +1145,40 @@
                 initWebGL(visDef.fs);
                 canvas.style.opacity = '1';
                 startTime = Date.now();
+                visScale = 0.5; visFrames = 0; visFpsWindow = Date.now(); visLastFrame = 0;
                 renderWebGL();
+            }
+        }
+
+        function toggleLiveVis() {
+            liveVisActive = !liveVisActive;
+            const btn = document.getElementById('live-btn');
+            const controls = document.getElementById('live-controls');
+            if (liveVisActive) {
+                if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+                currentVisIndex = 0;
+                document.getElementById('visualizer-canvas').style.opacity = '0';
+                const vbtn = document.getElementById('vis-btn');
+                vbtn.innerText = "Vis: OFF";
+                vbtn.classList.add('inactive');
+                vbtn.classList.remove('premium-btn');
+                btn.innerText = "Live: ON";
+                btn.classList.remove('inactive');
+                btn.classList.add('premium-btn');
+                controls.style.display = '';
+                const lk = localStorage.getItem('milkdrop_locked_preset');
+                mdAutoCycle = !lk;
+                const cbtn = document.getElementById('md-cycle-btn');
+                cbtn.innerText = mdAutoCycle ? 'Cycle: ON' : 'Cycle: OFF';
+                cbtn.classList.toggle('inactive', !mdAutoCycle);
+                syncLockUI();
+                startMilkDrop();
+            } else {
+                stopMilkDrop();
+                btn.innerText = "Live: OFF";
+                btn.classList.add('inactive');
+                btn.classList.remove('premium-btn');
+                controls.style.display = 'none';
             }
         }
 
@@ -746,6 +1337,61 @@
             btn.classList.toggle('inactive', !autoScroll);
         }
 
+        let countdownStyle = localStorage.getItem('countdown_style') || 'bar';
+        function syncCountdownBtn() {
+            const b = document.getElementById('countdown-btn');
+            if (b) b.innerText = 'Countdown: ' + (countdownStyle === 'big' ? 'Big' : 'Bar');
+        }
+        function cycleCountdownStyle() {
+            countdownStyle = countdownStyle === 'big' ? 'bar' : 'big';
+            localStorage.setItem('countdown_style', countdownStyle);
+            syncCountdownBtn();
+            if (countdownStyle === 'bar') document.getElementById('countdown-overlay').classList.remove('active');
+        }
+        syncCountdownBtn();
+
+        let duetTrackKeyMain = '', duetEnabledMain = false, duetPartsMain = {};
+        async function refreshMainDuet(force) {
+            const key = (currentArtist && currentTitle) ? `${currentArtist} - ${currentTitle}` : '';
+            if (!key) return;
+            if (!force && key === duetTrackKeyMain) return;
+            duetTrackKeyMain = key;
+            try {
+                const r = await fetch('/api/duet/state?trackKey=' + encodeURIComponent(key));
+                const j = await r.json();
+                duetEnabledMain = j.enabled;
+                duetPartsMain = j.parts || {};
+                applyDuetParts();
+            } catch (e) {}
+        }
+        function detectDuetParts(texts) {
+            const isParen = t => /^\(.*\)$/.test((t || '').trim());
+            const parts = {};
+            let parenCount = 0;
+            texts.forEach((t, i) => { if (isParen(t)) { parts[i] = 'B'; parenCount++; } });
+            if (texts.length < 6 || parenCount < 2) return {};
+            if (parenCount / texts.length > 0.7) return {};
+            return parts;
+        }
+        function applyDuetParts() {
+            document.querySelectorAll('.lyric-line[data-part]').forEach(el => el.removeAttribute('data-part'));
+            let parts = {};
+            if (parsedLyrics && parsedLyrics.length) {
+                parts = detectDuetParts(parsedLyrics.map(l => l.text));
+            }
+            Object.entries(duetPartsMain).forEach(([idx, part]) => {
+                if (part === 'A' || part === 'B') parts[idx] = part;
+                else delete parts[idx];
+            });
+            const hasParts = Object.keys(parts).length > 0;
+            if (!hasParts) return;
+            Object.entries(parts).forEach(([idx, part]) => {
+                const el = document.getElementById(`line-${idx}`);
+                if (el) el.setAttribute('data-part', part);
+            });
+        }
+        setInterval(() => refreshMainDuet(true), 15000);
+
         function toggleTrivia() {
             showTrivia = !showTrivia;
             const btn = document.getElementById('trivia-btn');
@@ -842,6 +1488,11 @@
         function loginWithSpotify() {
             window.location.href = '/auth/spotify/login';
         }
+
+        fetch('/api/auth-providers').then(r => r.json()).then(providers => {
+            if (!providers.spotify) document.getElementById('spotify-login-btn').style.display = 'none';
+            if (!providers.jellyfin) document.getElementById('jellyfin-login-btn').style.display = 'none';
+        }).catch(() => {});
 
         async function loginWithPlex() {
             const res = await fetch('https://plex.tv/api/v2/pins?strong=true', { method: 'POST', headers: CLIENT_HEADERS });
@@ -1003,6 +1654,7 @@
                 currentRawTrackKey = data.rawTrackKey;
                 currentArtist = data.artist;
                 currentTitle = data.title;
+                refreshMainDuet();
 
                 if (data.trivia && Array.isArray(data.trivia) && data.trivia.length > 0) availableTrivia = data.trivia;
 
@@ -1109,6 +1761,7 @@
                         }).join('');
                         container.innerHTML = `<div id="lyrics-inner">${htmlLines}</div>`;
                         if (romajiMode) applyRomaji();
+                        applyDuetParts();
                     } else {
                         isScatMode = true;
                         parsedLyrics = generateScatLyrics(data.genre, data.artist, currentDurationMs);
@@ -1244,6 +1897,8 @@
                     const upNextWidget = document.getElementById('up-next-widget');
                     const musicNote = document.getElementById('interlude-music-note');
                     const getReadyBanner = document.getElementById('get-ready-banner');
+                    const cdOverlay = document.getElementById('countdown-overlay');
+                    const cdRing = document.getElementById('cd-ring-fill');
                     const countdownFill = document.getElementById('countdown-fill');
                     const upcomingIndex = activeIndex === -1 ? 0 : activeIndex + 1;
 
@@ -1252,13 +1907,22 @@
                     if (autoHighlight) {
                         if (showCountdown) {
                             musicNote.style.opacity = 0;
-                            getReadyBanner.classList.add('active');
-                            countdownFill.style.width = `${Math.max(0, Math.min(100, ((5000 - timeToNext) / 5000) * 100))}%`;
+                            const cdProgress = Math.max(0, Math.min(100, ((5000 - timeToNext) / 5000) * 100));
+                            if (countdownStyle === 'big') {
+                                getReadyBanner.classList.remove('active');
+                                cdOverlay.classList.add('active');
+                                cdRing.style.strokeDashoffset = (565.5 * (1 - cdProgress / 100)).toFixed(1);
+                            } else {
+                                cdOverlay.classList.remove('active');
+                                getReadyBanner.classList.add('active');
+                                countdownFill.style.width = `${cdProgress}%`;
+                            }
                             upNextWidget.style.opacity = 0;
                             const upcomingEl = document.getElementById(`line-${upcomingIndex}`);
                             if (upcomingEl && upcomingIndex < parsedLyrics.length && parsedLyrics[upcomingIndex].text !== "") upcomingEl.classList.add('upcoming-preview');
                         } else if (isLongGap) {
                             getReadyBanner.classList.remove('active');
+                            cdOverlay.classList.remove('active');
                             musicNote.style.opacity = 0.3;
                             if (nextLineMs === Infinity && currentNextTrack) {
                                 document.getElementById('next-title').innerText = sanitizeText(`${currentNextTrack.title} - ${currentNextTrack.artist}`);
@@ -1267,6 +1931,7 @@
                         } else {
                             musicNote.style.opacity = 0;
                             getReadyBanner.classList.remove('active');
+                            cdOverlay.classList.remove('active');
                             upNextWidget.style.opacity = 0;
                         }
                     } else {
@@ -1281,6 +1946,7 @@
 
                     if (activeIndex !== -1 && activeIndex !== currentActiveLine) {
                         currentActiveLine = activeIndex;
+                        if (overlayMode) updateOverlayDisplay();
                         document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('highlight'));
                         const activeEl = document.getElementById(`line-${activeIndex}`);
                         if (activeEl && autoScroll) {

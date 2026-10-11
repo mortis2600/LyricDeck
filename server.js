@@ -52,6 +52,19 @@ let manualOverrides = persisted.manualOverrides || {};
 let syncOffsets = persisted.syncOffsets || {};
 let partyQueue = persisted.partyQueue || [];
 let lastNowPlaying = { playing: false };
+let lastPlexCreds = persisted.lastPlexCreds || null;
+let duetEnabled = persisted.duetEnabled || false;
+function genSessionCode() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let c = '';
+    for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
+    return c;
+}
+let sessionCode = persisted.sessionCode || genSessionCode();
+persisted.sessionCode = sessionCode;
+savePersist();
+let linkedSingers = persisted.linkedSingers || {};
+let duetParts = persisted.duetParts || {};
 
 // Origins allowed through /api/image (Spotify CDN + known media servers).
 // Plex server origins are learned as clients connect.
@@ -247,11 +260,122 @@ function getSpotifyRedirectUri(req) {
 
 // ---------- Page routes (party mode, remote, OBS overlay) ----------
 app.get('/party', (req, res) => res.sendFile(path.join(__dirname, 'public', 'party.html')));
+app.get('/help', (req, res) => res.sendFile(path.join(__dirname, 'public', 'help.html')));
 app.get('/remote', (req, res) => res.sendFile(path.join(__dirname, 'public', 'remote.html')));
 app.get('/overlay', (req, res) => res.sendFile(path.join(__dirname, 'public', 'overlay.html')));
 
+// Which login providers are actually configured (hide dead buttons).
+app.get('/api/auth-providers', (req, res) => {
+    res.json({
+        plex: true,
+        spotify: !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET),
+        jellyfin: !!(process.env.JELLYFIN_URL && process.env.JELLYFIN_API_KEY)
+    });
+});
+
+// ---------- Duet mode: split vocal parts ----------
+app.get('/api/duet/state', (req, res) => {
+    const key = (req.query.trackKey || '').slice(0, 200);
+    res.json({ enabled: duetEnabled, parts: (key && duetParts[key]) || {} });
+});
+app.post('/api/duet/toggle', express.json(), (req, res) => {
+    duetEnabled = !duetEnabled;
+    persisted.duetEnabled = duetEnabled;
+    savePersist();
+    res.json({ enabled: duetEnabled });
+});
+app.post('/api/duet/assign', express.json(), (req, res) => {
+    const key = (req.body.trackKey || '').slice(0, 200);
+    const idx = parseInt(req.body.index, 10);
+    const part = req.body.part;
+    if (!key || isNaN(idx) || !['A', 'B', 'both'].includes(part)) {
+        return res.status(400).json({ error: 'Bad request' });
+    }
+    if (!duetParts[key]) duetParts[key] = {};
+    if (part === 'both') delete duetParts[key][idx];
+    else duetParts[key][idx] = part;
+    if (Object.keys(duetParts[key]).length === 0) delete duetParts[key];
+    persisted.duetParts = duetParts;
+    savePersist();
+    res.json({ ok: true, parts: duetParts[key] || {} });
+});
+app.post('/api/duet/setparts', express.json(), (req, res) => {
+    const key = (req.body.trackKey || '').slice(0, 200);
+    const parts = req.body.parts || {};
+    if (!key || typeof parts !== 'object') return res.status(400).json({ error: 'Bad request' });
+    const clean = {};
+    Object.entries(parts).forEach(([idx, part]) => {
+        const i = parseInt(idx, 10);
+        if (!isNaN(i) && (part === 'A' || part === 'B')) clean[i] = part;
+    });
+    if (Object.keys(clean).length) duetParts[key] = clean;
+    else delete duetParts[key];
+    persisted.duetParts = duetParts;
+    savePersist();
+    res.json({ ok: true, parts: duetParts[key] || {} });
+});
+app.post('/api/duet/clear', express.json(), (req, res) => {
+    const key = (req.body.trackKey || '').slice(0, 200);
+    if (key && duetParts[key]) {
+        delete duetParts[key];
+        persisted.duetParts = duetParts;
+        savePersist();
+    }
+    res.json({ ok: true });
+});
+
+// ---------- Session code: link phones without Plex login ----------
+app.get('/api/session/code', (req, res) => {
+    res.json({ code: sessionCode });
+});
+app.post('/api/session/join', express.json(), (req, res) => {
+    const code = (req.body.code || '').toUpperCase().trim();
+    const name = (req.body.name || '').slice(0, 40).trim();
+    if (code !== sessionCode) return res.status(403).json({ error: 'Invalid code' });
+    if (!name) return res.status(400).json({ error: 'Name required' });
+    // auto-assign duet singer: first gets A, second gets B
+    let singer = null;
+    if (!linkedSingers.A) { linkedSingers.A = name; singer = 'A'; }
+    else if (!linkedSingers.B && linkedSingers.A !== name) { linkedSingers.B = name; singer = 'B'; }
+    else if (linkedSingers.A === name) singer = 'A';
+    else if (linkedSingers.B === name) singer = 'B';
+    persisted.linkedSingers = linkedSingers;
+    savePersist();
+    res.json({ ok: true, singer, name });
+});
+app.post('/api/session/leave', express.json(), (req, res) => {
+    const name = (req.body.name || '').slice(0, 40).trim();
+    if (linkedSingers.A === name) delete linkedSingers.A;
+    if (linkedSingers.B === name) delete linkedSingers.B;
+    persisted.linkedSingers = linkedSingers;
+    savePersist();
+    res.json({ ok: true });
+});
+app.post('/api/session/reset', express.json(), (req, res) => {
+    linkedSingers = {};
+    persisted.linkedSingers = {};
+    sessionCode = genSessionCode();
+    persisted.sessionCode = sessionCode;
+    savePersist();
+    res.json({ ok: true, code: sessionCode });
+});
+
 // ---------- Party mode state & queue ----------
-app.get('/api/party/state', (req, res) => {
+app.get('/api/party/state', async (req, res) => {
+    const stale = !lastNowPlaying.fetchedAt || (Date.now() - lastNowPlaying.fetchedAt > 5000);
+    if (stale) {
+        if (lastPlexCreds) {
+            try {
+                const q = new URLSearchParams({ serverUrl: lastPlexCreds.serverUrl, token: lastPlexCreds.token });
+                if (lastPlexCreds.targetClient) q.append('targetClient', lastPlexCreds.targetClient);
+                await axios.get(`http://127.0.0.1:${PORT}/api/now-playing?${q.toString()}`, { timeout: 8000 });
+            } catch (e) {}
+        } else if (process.env.JELLYFIN_URL && process.env.JELLYFIN_API_KEY) {
+            try {
+                await axios.get(`http://127.0.0.1:${PORT}/api/jellyfin/now-playing`, { timeout: 8000 });
+            } catch (e) {}
+        }
+    }
     res.json(Object.assign({}, lastNowPlaying, { queue: partyQueue }));
 });
 
@@ -491,6 +615,9 @@ app.post('/api/override', (req, res) => {
 app.get('/api/now-playing', async (req, res) => {
     const { serverUrl, token, targetClient } = req.query;
     if (!serverUrl || !token) return res.status(400).json({ error: 'Missing credentials' });
+    lastPlexCreds = { serverUrl, token, targetClient: targetClient || null };
+    persisted.lastPlexCreds = lastPlexCreds;
+    savePersist();
 
     // Learn this Plex server's origin for the /api/image allowlist.
     const srvOrigin = originOf(serverUrl);
@@ -504,10 +631,10 @@ app.get('/api/now-playing', async (req, res) => {
         });
 
         const sessions = plexRes.data?.MediaContainer?.Metadata;
-        if (!sessions || sessions.length === 0) return res.json({ playing: false });
+        if (!sessions || sessions.length === 0) { lastNowPlaying = { playing: false, fetchedAt: Date.now() }; return res.json({ playing: false }); }
 
         const trackSessions = sessions.filter(s => s.type === 'track');
-        if (trackSessions.length === 0) return res.json({ playing: false });
+        if (trackSessions.length === 0) { lastNowPlaying = { playing: false, fetchedAt: Date.now() }; return res.json({ playing: false }); }
 
         const availableSessions = trackSessions.map(s => ({
             id: s.Player?.machineIdentifier || s.sessionKey,
@@ -606,7 +733,7 @@ app.get('/api/jellyfin/now-playing', async (req, res) => {
         });
 
         const sessions = (sessRes.data || []).filter(s => s.NowPlayingItem && s.NowPlayingItem.MediaType === 'Audio');
-        if (sessions.length === 0) return res.json({ playing: false });
+        if (sessions.length === 0) { lastNowPlaying = { playing: false, fetchedAt: Date.now() }; return res.json({ playing: false }); }
 
         const availableSessions = sessions.map(s => ({
             id: s.Id,

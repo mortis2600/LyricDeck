@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDeck Help</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+<style>
+    :root { --accent-color: #1DB954; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0a0a0a; color: #eee; font-family: 'Segoe UI', sans-serif; line-height: 1.65; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 80px 20px; }
+    h1 { font-size: 2rem; margin: 0 0 4px 0; }
+    .sub { color: rgba(255,255,255,0.55); margin-bottom: 28px; }
+    h2 { color: var(--accent-color); font-size: 1.25rem; margin: 32px 0 8px 0; text-transform: uppercase; letter-spacing: 1px; }
+    h3 { font-size: 1.05rem; margin: 18px 0 6px 0; }
+    p, li { color: rgba(255,255,255,0.85); }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    code { background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px; font-size: 0.9em; }
+    .btn-name { display: inline-block; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 2px 10px; font-size: 0.85em; font-weight: 700; }
+    .tip { background: rgba(29,185,84,0.08); border-left: 4px solid var(--accent-color); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 16px 0; }
+    .warn { background: rgba(255,180,0,0.07); border-left: 4px solid #ffb400; padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 16px 0; }
+    a { color: var(--accent-color); }
+    .nav { margin-bottom: 24px; }
+    .nav a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <h1>🎙️ LyricDeck Help</h1>
+    <div class="sub">Synced lyrics for Plex (and Jellyfin), karaoke party mode, and live visualizers.</div>
+    <div class="nav"><a href="/">Main</a><a href="/party">Party</a><a href="/remote">Remote</a><a href="/overlay">Overlay</a></div>
+
+    <h2>Main Screen</h2>
+    <p>The main screen follows whatever is playing on your Plex server and shows synced lyrics in real time.</p>
+    <ul>
+        <li><span class="btn-name">Highlight</span> — highlights the currently-sung line.</li>
+        <li><span class="btn-name">Sync</span> — nudge lyrics earlier or later if they're off beat. Hover to reveal fine tuning (-1s to +1s). Click the <code>0.00s</code> readout to reset. Your adjustment is remembered per song.</li>
+        <li><span class="btn-name">Auto-Scroll</span> — keeps the current line centered.</li>
+        <li><span class="btn-name">Countdown</span> — switches the pre-lyrics countdown between <b>Bar</b> (small progress bar) and <b>Big</b> (full-screen celebratory ring overlay, no numbers).</li>
+        <li><span class="btn-name">Trivia</span> — pop-up music trivia during long instrumental breaks.</li>
+        <li><span class="btn-name">Vis</span> — cycles animated shader backgrounds (Geiss, MilkDrop, Void, Nebula, Rings).</li>
+        <li><span class="btn-name">Live</span> — audio-reactive visuals driven by your microphone. See Visualizers below.</li>
+        <li><span class="btn-name">OBS</span> — minimal transparent lyric display for streaming. Pair with fullscreen and add as a browser source in OBS.</li>
+        <li><span class="btn-name">Explicit/Clean</span> — filters explicit words from lyrics.</li>
+        <li><span class="btn-name">Romaji</span> — romanizes Japanese lyrics.</li>
+        <li><span class="btn-name">Fullscreen</span> — fullscreen mode. The top bar auto-hides when idle.</li>
+    </ul>
+    <p>Click the <b>✏️</b> next to a song title to correct the artist/title when the wrong lyrics load. Your correction is saved.</p>
+
+    <h2>Visualizers</h2>
+    <h3>Shader visualizers (Vis button)</h3>
+    <p>Lightweight animated backgrounds. They render at reduced resolution and auto-drop quality if your GPU struggles.</p>
+    <h3>Live visualizers (Live button)</h3>
+    <p>These react to the actual music via your microphone.</p>
+    <div class="warn"><b>Microphone needs a secure context.</b> Open LyricDeck over the <b>https</b> address (not the local <code>http://192.168…</code> IP), then allow mic access when asked.</div>
+    <ul>
+        <li><span class="btn-name">Style</span> — switch between <b>MilkDrop</b> (real MilkDrop presets, auto-rotating), <b>Orbs</b> (bass-reactive bouncing orbs), <b>Chasers</b> (orbiting lights), and <b>Spectrum</b> (classic FFT bars). Orbs, Chasers, and Spectrum also react subtly to your mouse.</li>
+        <li><span class="btn-name">Next &gt;</span> — skip to the next MilkDrop preset.</li>
+        <li><span class="btn-name">Cycle</span> — auto-change MilkDrop presets every 30 seconds.</li>
+        <li><span class="btn-name">Lock</span> — freeze on the current preset and remember it for next time.</li>
+        <li><span class="btn-name">Ban</span> — never show the current preset again. Ban the frantic ones, lock the good ones, and your rotation gets better over time.</li>
+    </ul>
+
+    <h2>Party Mode <code>/party</code></h2>
+    <p>Put this on the big screen. Huge current lyric line, dimmed next-line preview, track header. Follows the music by itself, no login needed on the display once the main screen has connected once.</p>
+    <p>In duet mode, the current line is color-coded by singer part (cyan = A, pink = B).</p>
+
+    <h2>Phone Remote <code>/remote</code></h2>
+    <ul>
+        <li>Search for songs and add them to the party queue.</li>
+        <li>See what's playing and manage the queue.</li>
+        <li><b>Duet controls</b> — see Duet Mode below.</li>
+    </ul>
+
+    <h2>Duet Mode</h2>
+    <p>Split a song's vocal parts between two singers, each following on their own phone.</p>
+    <ul>
+        <li>On any phone at <code>/remote</code>, tap <span class="btn-name">Duet: ON</span>.</li>
+        <li>Tap lyric lines to assign them: <b>both → A → B</b>. Assignments are saved per song.</li>
+        <li>Each singer taps <span class="btn-name">I sing A</span> or <span class="btn-name">I sing B</span> — their lines are highlighted, the other's dimmed.</li>
+        <li>The main screen and party display color-code parts automatically (cyan = A, pink = B).</li>
+    </ul>
+
+    <h2>OBS Overlay <code>/overlay</code></h2>
+    <p>Transparent lyric overlay for streaming. Add as a browser source in OBS. Or use the <span class="btn-name">OBS</span> toggle on the main screen instead — same thing, no second URL needed.</p>
+
+    <div class="tip"><b>Karaoke night setup:</b> <code>/party</code> on the TV, <code>/remote</code> on everyone's phones for the queue, Live visualizers behind the lyrics, duet mode for the brave.</div>
+
+    <h2>Troubleshooting</h2>
+    <ul>
+        <li><b>Lyrics out of sync</b> — hover the sync pill and nudge with the fine-tune buttons. It's saved per song.</li>
+        <li><b>Wrong lyrics loaded</b> — click ✏️ by the title and correct the artist/title.</li>
+        <li><b>Live visualizers won't start</b> — use the https address, not the local IP. Mic access requires a secure context.</li>
+        <li><b>Party screen stuck on an old song</b> — open the main screen once so it picks up the current session, party mode follows from there.</li>
+    </ul>
+</div>
+</body>
+</html>

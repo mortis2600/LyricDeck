@@ -31,11 +31,17 @@
         <div id="line-current" style="display:none;"></div>
         <div id="line-next" style="display:none;"></div>
     </div>
-    <div id="party-queue-hint">Add songs from your phone: /remote</div>
+    <div id="party-queue-hint">Add songs from your phone: /remote &middot; Code: <b id="party-code">…</b></div>
+    <script>fetch('/api/session/code').then(r=>r.json()).then(j=>{document.getElementById('party-code').innerText=j.code;}).catch(()=>{});</script>
+    <div style="position:absolute;bottom:18px;left:28px;font-size:0.85rem;color:rgba(255,255,255,0.35);"><a href="/help" style="color:inherit;">?</a></div>
 <script>
     let state = null;
     let parsed = [];
     let stateTrackId = "";
+    let duetEnabled = false;
+    let duetParts = {};
+    let duetLineIndex = -1;
+    const DUET_COLORS = { A: '#22d3ee', B: '#f472b6' };
 
     function parseLRC(lrcText) {
         const lines = (lrcText || '').split('\n');
@@ -61,6 +67,23 @@
         try {
             const res = await fetch('/api/party/state');
             const data = await res.json();
+            try {
+                const trackKey = data.playing ? `${data.artist} - ${data.title}` : '';
+                if (trackKey) {
+                    const dr = await fetch('/api/duet/state?trackKey=' + encodeURIComponent(trackKey));
+                    const dj = await dr.json();
+                    duetEnabled = dj.enabled;
+                    duetParts = dj.parts || {};
+                } else { duetEnabled = false; duetParts = {}; }
+                // automatic part detection for display (no toggle needed)
+                if (!duetEnabled && parsed.length >= 6) {
+                    const isParen = t => /^\(.*\)$/.test((t || '').trim());
+                    let pc = 0;
+                    const auto = {};
+                    parsed.forEach((l, i) => { if (isParen(l.text)) { auto[i] = 'B'; pc++; } });
+                    if (pc >= 2 && pc / parsed.length <= 0.7) duetParts = Object.assign({}, auto, duetParts);
+                }
+            } catch (e) {}
             const trackId = data.playing ? `${data.artist} - ${data.title}` : "";
             if (trackId !== stateTrackId) {
                 stateTrackId = trackId;
@@ -99,7 +122,12 @@
             const nxt = document.getElementById('line-next');
             if (idx >= 0) {
                 cur.innerText = parsed[idx].text;
+                const part = duetEnabled ? (duetParts[idx] || 'both') : 'both';
+                cur.style.color = DUET_COLORS[part] || '#fff';
+                duetLineIndex = idx;
+                const nxtPart = duetEnabled ? (duetParts[idx + 1] || 'both') : 'both';
                 nxt.innerText = (idx + 1 < parsed.length) ? parsed[idx + 1].text : '';
+                nxt.style.color = DUET_COLORS[nxtPart] || 'rgba(255,255,255,0.45)';
             } else {
                 cur.innerText = parsed.length ? parsed[0].text : '';
                 cur.style.opacity = '0.5';
