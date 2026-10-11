@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDeck Remote</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+<style>
+    :root { --accent-color: #1DB954; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0a0a0a; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 16px; max-width: 640px; margin-left: auto; margin-right: auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 4px 0; }
+    h2 { font-size: 1.1rem; margin: 24px 0 8px 0; color: var(--accent-color); text-transform: uppercase; letter-spacing: 1px; }
+    #now-playing { background: #141414; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; }
+    #np-title { font-weight: 800; font-size: 1.1rem; }
+    #np-artist { color: var(--accent-color); font-weight: 600; margin-top: 2px; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    input { flex: 1; padding: 12px; background: #18181b; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 1rem; outline: none; }
+    input:focus { border-color: var(--accent-color); }
+    button { background: var(--accent-color); color: #000; font-weight: 700; border: none; border-radius: 8px; padding: 12px 18px; font-size: 1rem; cursor: pointer; }
+    button.ghost { background: rgba(255,255,255,0.08); color: #fff; }
+    button.danger { background: rgba(255,80,80,0.15); color: #ff8080; border: 1px solid rgba(255,80,80,0.4); }
+    .item { background: #141414; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+    .item .meta { flex: 1; min-width: 0; }
+    .item .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .a { font-size: 0.85rem; color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item button { padding: 8px 12px; font-size: 0.85rem; flex-shrink: 0; }
+    .empty { color: rgba(255,255,255,0.4); font-size: 0.95rem; padding: 8px 0; }
+    #who { width: 100%; margin-top: 12px; }
+</style>
+</head>
+<body>
+    <h1>LyricDeck Remote</h1>
+
+    <h2>Now Playing</h2>
+    <div id="now-playing">
+        <div id="np-title">Nothing playing</div>
+        <div id="np-artist"></div>
+    </div>
+
+    <h2>Search and Queue</h2>
+    <input id="who" placeholder="Your name (for the queue)">
+    <div class="row">
+        <input id="q-artist" placeholder="Artist">
+        <input id="q-title" placeholder="Title">
+        <button onclick="search()">Search</button>
+    </div>
+    <div id="results" style="margin-top:12px;"></div>
+
+    <h2>Party Queue <span id="q-count"></span></h2>
+    <div id="queue"></div>
+    <div class="row">
+        <button class="danger ghost" onclick="clearQueue()" style="width:100%;">Clear queue</button>
+    </div>
+
+<script>
+    async function refreshState() {
+        try {
+            const res = await fetch('/api/party/state');
+            const data = await res.json();
+            document.getElementById('np-title').innerText = data.playing ? (data.title || '') : 'Nothing playing';
+            document.getElementById('np-artist').innerText = data.playing ? (data.artist || '') : '';
+            const q = data.queue || [];
+            document.getElementById('q-count').innerText = q.length ? `(${q.length})` : '';
+            const qEl = document.getElementById('queue');
+            qEl.innerHTML = q.length === 0
+                ? '<div class="empty">Queue is empty. Search above to add songs.</div>'
+                : q.map((item, i) => `
+                    <div class="item">
+                        <div class="meta">
+                            <div class="t">${escapeHtml(item.title)}</div>
+                            <div class="a">${escapeHtml(item.artist)}${item.addedBy ? ' &middot; ' + escapeHtml(item.addedBy) : ''}</div>
+                        </div>
+                        <button class="ghost" onclick="removeAt(${i})">Remove</button>
+                    </div>`).join('');
+        } catch (e) {}
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function search() {
+        const artist = document.getElementById('q-artist').value.trim();
+        const title = document.getElementById('q-title').value.trim();
+        const box = document.getElementById('results');
+        if (!artist && !title) { box.innerHTML = '<div class="empty">Enter an artist or title.</div>'; return; }
+        box.innerHTML = '<div class="empty">Searching...</div>';
+        try {
+            const res = await fetch(`/api/search-lyrics?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) {
+                box.innerHTML = '<div class="empty">No synced lyrics found.</div>';
+                return;
+            }
+            box.innerHTML = data.slice(0, 10).map(item => `
+                <div class="item">
+                    <div class="meta">
+                        <div class="t">${escapeHtml(item.trackName)}</div>
+                        <div class="a">${escapeHtml(item.artistName)} &middot; ${escapeHtml(item.albumName || 'Unknown Album')}</div>
+                    </div>
+                    <button onclick="queueSong(${item.id}, '${escapeHtml(item.trackName).replace(/'/g, "\\'")}', '${escapeHtml(item.artistName).replace(/'/g, "\\'")}')">Queue</button>
+                </div>`).join('');
+            box.dataset.results = JSON.stringify(data.slice(0, 10));
+        } catch (e) {
+            box.innerHTML = '<div class="empty">Search failed.</div>';
+        }
+    }
+
+    async function queueSong(id, title, artist) {
+        const addedBy = document.getElementById('who').value.trim() || 'guest';
+        await fetch('/api/party/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, artist, lrcId: id, addedBy })
+        });
+        refreshState();
+    }
+
+    async function removeAt(i) {
+        await fetch('/api/party/queue/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: i })
+        });
+        refreshState();
+    }
+
+    async function clearQueue() {
+        if (!confirm('Clear the whole party queue?')) return;
+        await fetch('/api/party/queue/clear', { method: 'POST' });
+        refreshState();
+    }
+
+    refreshState();
+    setInterval(refreshState, 3000);
+</script>
+</body>
+</html>

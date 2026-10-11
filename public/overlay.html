@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDeck Overlay</title>
+<style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: transparent; height: 100%; overflow: hidden; }
+    body { font-family: 'Segoe UI', sans-serif; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; }
+    #ov-track { padding: 12px 20px 0 20px; font-size: 15px; font-weight: 600; color: rgba(255,255,255,0.75); text-shadow: 0 2px 8px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #ov-line { padding: 6px 20px 22px 20px; font-size: 34px; font-weight: 800; line-height: 1.25; text-shadow: 0 2px 12px #000, 0 0 2px #000; transition: opacity 0.2s ease; }
+</style>
+</head>
+<body>
+    <div id="ov-track"></div>
+    <div id="ov-line"></div>
+<script>
+    let state = null;
+    let parsed = [];
+    let stateTrackId = "";
+
+    function parseLRC(lrcText) {
+        const lines = (lrcText || '').split('\n');
+        const result = [];
+        const regex = /\[(\d{2,}):(\d{2}\.\d{2,3})\](.*)/;
+        for (const line of lines) {
+            const m = line.match(regex);
+            if (m) {
+                const timeMs = (parseInt(m[1], 10) * 60 + parseFloat(m[2])) * 1000;
+                const text = m[3].trim();
+                if (text) result.push({ timeMs, text });
+            }
+        }
+        return result;
+    }
+
+    function estimatedMs() {
+        if (!state || !state.playing || state.playerState === 'paused') return state ? state.offsetMs || 0 : 0;
+        return (state.offsetMs || 0) + (Date.now() - (state.fetchedAt || Date.now()));
+    }
+
+    async function poll() {
+        try {
+            const res = await fetch('/api/party/state');
+            const data = await res.json();
+            const trackId = data.playing ? `${data.artist} - ${data.title}` : "";
+            if (trackId !== stateTrackId) {
+                stateTrackId = trackId;
+                parsed = data.syncedLyrics ? parseLRC(data.syncedLyrics) : [];
+            }
+            state = data;
+            document.getElementById('ov-track').innerText =
+                data.playing ? `${data.artist || ''} - ${data.title || ''}` : '';
+        } catch (e) {}
+    }
+
+    function render() {
+        const el = document.getElementById('ov-line');
+        if (state && state.playing && parsed.length > 0) {
+            const now = estimatedMs();
+            let idx = -1;
+            for (let i = 0; i < parsed.length; i++) {
+                if (now >= parsed[i].timeMs) idx = i;
+                else break;
+            }
+            el.innerText = idx >= 0 ? parsed[idx].text : '';
+        } else {
+            el.innerText = '';
+        }
+        requestAnimationFrame(render);
+    }
+
+    poll();
+    setInterval(poll, 2000);
+    requestAnimationFrame(render);
+</script>
+</body>
+</html>

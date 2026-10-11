@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDeck Party</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+<style>
+    :root { --accent-color: #1DB954; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; cursor: none; }
+    #party-track { padding: 24px 40px 0 40px; text-align: left; flex-shrink: 0; }
+    #party-title { margin: 0; font-size: 1.6rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #party-artist { margin: 4px 0 0 0; font-size: 1.1rem; color: var(--accent-color); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #party-next { margin: 6px 0 0 0; font-size: 0.95rem; color: rgba(255,255,255,0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #party-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 6vw; text-align: center; }
+    #line-current { font-size: min(4.2rem, 7vw); font-weight: 800; line-height: 1.25; text-shadow: 0 4px 30px rgba(0,0,0,0.8); transition: opacity 0.25s ease; }
+    #line-next { margin-top: 3vh; font-size: min(2rem, 3.4vw); font-weight: 500; color: rgba(255,255,255,0.45); line-height: 1.3; }
+    #party-waiting { font-size: 2rem; color: rgba(255,255,255,0.4); }
+    #party-queue-hint { position: absolute; bottom: 18px; right: 28px; font-size: 0.85rem; color: rgba(255,255,255,0.35); }
+</style>
+</head>
+<body>
+    <div id="party-track">
+        <h1 id="party-title">LyricDeck Party</h1>
+        <p id="party-artist">Waiting for music...</p>
+        <p id="party-next"></p>
+    </div>
+    <div id="party-stage">
+        <div id="party-waiting">Start playing something on Plex or Jellyfin</div>
+        <div id="line-current" style="display:none;"></div>
+        <div id="line-next" style="display:none;"></div>
+    </div>
+    <div id="party-queue-hint">Add songs from your phone: /remote</div>
+<script>
+    let state = null;
+    let parsed = [];
+    let stateTrackId = "";
+
+    function parseLRC(lrcText) {
+        const lines = (lrcText || '').split('\n');
+        const result = [];
+        const regex = /\[(\d{2,}):(\d{2}\.\d{2,3})\](.*)/;
+        for (const line of lines) {
+            const m = line.match(regex);
+            if (m) {
+                const timeMs = (parseInt(m[1], 10) * 60 + parseFloat(m[2])) * 1000;
+                const text = m[3].trim();
+                if (text) result.push({ timeMs, text });
+            }
+        }
+        return result;
+    }
+
+    function estimatedMs() {
+        if (!state || !state.playing || state.playerState === 'paused') return state ? state.offsetMs || 0 : 0;
+        return (state.offsetMs || 0) + (Date.now() - (state.fetchedAt || Date.now()));
+    }
+
+    async function poll() {
+        try {
+            const res = await fetch('/api/party/state');
+            const data = await res.json();
+            const trackId = data.playing ? `${data.artist} - ${data.title}` : "";
+            if (trackId !== stateTrackId) {
+                stateTrackId = trackId;
+                parsed = data.syncedLyrics ? parseLRC(data.syncedLyrics) : [];
+            }
+            state = data;
+            if (data.playing) {
+                document.getElementById('party-title').innerText = data.title || '';
+                document.getElementById('party-artist').innerText = data.artist || '';
+                document.getElementById('party-next').innerText =
+                    (data.nextTrack ? `Up next: ${data.nextTrack.title} - ${data.nextTrack.artist}` : '') +
+                    (data.queue && data.queue.length ? `  (${data.queue.length} in party queue)` : '');
+                document.getElementById('party-waiting').style.display = 'none';
+                document.getElementById('line-current').style.display = 'block';
+                document.getElementById('line-next').style.display = 'block';
+            } else {
+                document.getElementById('party-title').innerText = 'LyricDeck Party';
+                document.getElementById('party-artist').innerText = 'Waiting for music...';
+                document.getElementById('party-next').innerText = '';
+                document.getElementById('party-waiting').style.display = 'block';
+                document.getElementById('line-current').style.display = 'none';
+                document.getElementById('line-next').style.display = 'none';
+            }
+        } catch (e) {}
+    }
+
+    function render() {
+        if (state && state.playing && parsed.length > 0) {
+            const now = estimatedMs();
+            let idx = -1;
+            for (let i = 0; i < parsed.length; i++) {
+                if (now >= parsed[i].timeMs) idx = i;
+                else break;
+            }
+            const cur = document.getElementById('line-current');
+            const nxt = document.getElementById('line-next');
+            if (idx >= 0) {
+                cur.innerText = parsed[idx].text;
+                nxt.innerText = (idx + 1 < parsed.length) ? parsed[idx + 1].text : '';
+            } else {
+                cur.innerText = parsed.length ? parsed[0].text : '';
+                cur.style.opacity = '0.5';
+                nxt.innerText = '';
+                return;
+            }
+            cur.style.opacity = '1';
+        }
+        requestAnimationFrame(render);
+    }
+
+    poll();
+    setInterval(poll, 2000);
+    requestAnimationFrame(render);
+</script>
+</body>
+</html>
