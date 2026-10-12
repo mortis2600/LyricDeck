@@ -491,6 +491,7 @@
                 <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn" title="Show pop-up music trivia during instrumental breaks">Trivia: ON</button>
                 <button class="util-btn inactive" onclick="toggleCleanMode()" id="clean-btn" title="Filter explicit words from lyrics">Explicit</button>
                 <button class="util-btn inactive" onclick="toggleRomaji()" id="romaji-btn" title="Show Japanese lyrics as romaji and Korean lyrics in romanized text">Romaji: OFF</button>
+                <button class="util-btn inactive" onclick="toggleLiveScat()" id="livescat-btn" title="Live Scat: for songs with no lyrics, scat along to the music live through the mic">Live Scat: OFF</button>
             </div>
             <div class="sp-section">
                 <h3>Party &amp; Duet</h3>
@@ -1483,6 +1484,7 @@
             });
         }
         setInterval(() => refreshMainDuet(true), 15000);
+        setInterval(() => { if (liveScatActive) liveScatTick(); }, 120); // live scat engine
 
         // ---------- Settings panel ----------
         function toggleSettingsPanel(force) {
@@ -1568,6 +1570,192 @@
             document.body.classList.toggle('overlay-mode', overlayMode);
             syncCountdownBtn();
             syncDuetUI();
+            syncLiveScatBtn();
+        }
+
+        // ---------- Live Scat: mic-driven scat engine for lyric-less songs ----------
+        // Provider seam: 'mic' is implemented. A future 'local' provider (server-side
+        // analysis of the local library) would hook in via tryStartLiveScat().
+        const SCAT_BANKS = {
+            bass:   ['BAH', 'BOOM', 'DOOM', 'BWAH', 'DUM', 'BUH', 'BAP', 'WUB'],
+            mid:    ['DAH', 'LAH', 'DOO', 'DEE', 'LOO', 'BAH', 'YAH'],
+            treble: ['TSS', 'SHH', 'TIK', 'CHIK', 'PSS', 'TSSS', 'SK', 'TSK']
+        };
+        const SCAT_FLUX_RATIO = 1.7;    // onset when flux exceeds this x running average
+        const SCAT_FLUX_FLOOR = 0.35;   // absolute flux floor (ignores near-silence)
+        const SCAT_MIN_GAP_MS = 170;    // min time between scat hits
+        const SCAT_ENERGY_FLOOR = 0.04; // min overall energy to vocalize
+        const SCAT_MAX_LINES = 48;      // rolling window of live lines
+        const SCAT_PHRASE_MS = 1400;    // syllables closer than this join one line
+        const SCAT_PHRASE_SYLS = 4;     // max syllables per line
+
+        let liveScatOn = lsBool('ld_livescat', false);
+        let liveScatActive = false;
+        let scatMic = { ctx: null, analyser: null, stream: null, starting: false };
+        let scatFreq = null, scatPrev = null, scatFluxAvg = 0, scatLastOnset = 0;
+        let scatBassAvg = 0.12, scatMidAvg = 0.12, scatTrebAvg = 0.12; // adaptive band floors
+
+        function syncLiveScatBtn() {
+            const b = document.getElementById('livescat-btn');
+            if (!b) return;
+            b.innerText = liveScatOn ? 'Live Scat: ON' : 'Live Scat: OFF';
+            b.classList.toggle('inactive', !liveScatOn);
+            b.classList.toggle('premium-btn', liveScatOn);
+        }
+
+        async function ensureScatAnalyser() {
+            if (liveVisActive && mdAnalyser) return true; // share MilkDrop's mic
+            if (scatMic.analyser) {
+                if (scatMic.ctx && scatMic.ctx.state === 'suspended') {
+                    try { await scatMic.ctx.resume(); } catch (e) {}
+                }
+                return true;
+            }
+            if (scatMic.starting) return false;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+            scatMic.starting = true;
+            try {
+                scatMic.stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                });
+                scatMic.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const src = scatMic.ctx.createMediaStreamSource(scatMic.stream);
+                scatMic.analyser = scatMic.ctx.createAnalyser();
+                scatMic.analyser.fftSize = 512;
+                scatMic.analyser.smoothingTimeConstant = 0.55;
+                src.connect(scatMic.analyser);
+                scatMic.starting = false;
+                return true;
+            } catch (e) { scatMic.starting = false; return false; }
+        }
+
+        async function toggleLiveScat() {
+            liveScatOn = !liveScatOn;
+            lsPersist('ld_livescat', liveScatOn);
+            syncLiveScatBtn();
+            if (liveScatOn) {
+                const ok = await ensureScatAnalyser();
+                if (!ok) {
+                    liveScatOn = false;
+                    lsPersist('ld_livescat', false);
+                    syncLiveScatBtn();
+                    alert('Live Scat needs microphone access. Use the https address and allow the mic when asked.');
+                    return;
+                }
+                if (isScatMode && currentTrack) currentTrack = ""; // rebuild -> live scat takes over
+            } else {
+                stopLiveScat();
+                if (isScatMode && currentTrack) currentTrack = ""; // rebuild -> fallback grid
+            }
+        }
+
+        async function tryStartLiveScat(token) {
+            const ok = await ensureScatAnalyser();
+            if (!ok || !liveScatOn || !isScatMode || currentTrack !== token) return;
+            startLiveScat();
+        }
+
+        function startLiveScat() {
+            const inner = document.getElementById('lyrics-inner');
+            if (inner) inner.innerHTML = '';
+            parsedLyrics = [];
+            liveScatActive = true;
+            scatFluxAvg = 0;
+            scatLastOnset = 0;
+            scatBassAvg = 0.12; scatMidAvg = 0.12; scatTrebAvg = 0.12;
+            const c = document.getElementById('lyrics-container');
+            if (c) c.scrollTop = 0;
+        }
+
+        function stopLiveScat() { liveScatActive = false; }
+
+        function liveScatTick() {
+            const an = (liveVisActive && mdAnalyser) ? mdAnalyser : scatMic.analyser;
+            if (!an) return;
+            const n = an.frequencyBinCount;
+            if (!scatFreq || scatFreq.length !== n) { scatFreq = new Uint8Array(n); scatPrev = new Float32Array(n); }
+            an.getByteFrequencyData(scatFreq);
+            let flux = 0;
+            for (let i = 1; i < n; i++) {
+                const d = scatFreq[i] - scatPrev[i];
+                if (d > 0) flux += d;
+                scatPrev[i] = scatFreq[i];
+            }
+            flux /= n;
+            scatFluxAvg = scatFluxAvg * 0.92 + flux * 0.08;
+            const band = (a, b) => {
+                let sum = 0, c = 0;
+                for (let i = a; i < b && i < n; i++) { sum += scatFreq[i]; c++; }
+                return c ? sum / (c * 255) : 0;
+            };
+            const bass = band(1, 8), mid = band(8, 48), treb = band(48, 160);
+            scatBassAvg += (bass - scatBassAvg) * 0.03;
+            scatMidAvg += (mid - scatMidAvg) * 0.03;
+            scatTrebAvg += (treb - scatTrebAvg) * 0.03;
+            const energy = (bass + mid + treb) / 3;
+            const now = Date.now();
+            if (flux > Math.max(scatFluxAvg * SCAT_FLUX_RATIO, SCAT_FLUX_FLOOR) &&
+                energy > SCAT_ENERGY_FLOOR && now - scatLastOnset > SCAT_MIN_GAP_MS) {
+                scatLastOnset = now;
+                scatOnset(bass, mid, treb, flux);
+            }
+        }
+
+        function scatOnset(bass, mid, treb, flux) {
+            // adaptive: which band is most excited *relative to its own recent level*?
+            // self-calibrates to room, mic, and song — hats win during hat sections
+            // even when the kick is louder in absolute terms.
+            const bX = bass / (scatBassAvg + 0.02);
+            const mX = mid / (scatMidAvg + 0.02);
+            const tX = treb / (scatTrebAvg + 0.02);
+            let bank;
+            if (bX >= mX && bX >= tX) bank = SCAT_BANKS.bass;
+            else if (tX >= mX) bank = SCAT_BANKS.treble;
+            else bank = SCAT_BANKS.mid;
+            let syl = bank[(Math.random() * bank.length) | 0];
+            if (scatFluxAvg > 0 && flux > scatFluxAvg * 3) syl = syl.replace(/([AEIOU])/, '$1$1$1'); // big hit: elongate
+            appendScatSyllable(syl);
+        }
+
+        function appendScatSyllable(syl) {
+            const inner = document.getElementById('lyrics-inner');
+            if (!inner) return;
+            const now = Date.now();
+            let last = inner.lastElementChild;
+            let target;
+            const lastCount = last ? parseInt(last.dataset.sylCount || '1', 10) : 0;
+            const lastT = last ? parseInt(last.dataset.t0 || '0', 10) : 0;
+            if (!last || lastCount >= SCAT_PHRASE_SYLS || now - lastT > SCAT_PHRASE_MS) {
+                const tilt = (Math.random() * 8 - 4).toFixed(1);
+                target = document.createElement('div');
+                target.className = 'lyric-line scat-line';
+                target.dataset.sylCount = '1';
+                target.dataset.t0 = String(now);
+                const span = document.createElement('span');
+                span.className = 'lyric-main scat-text';
+                span.style.cssText = `--tilt: ${tilt}; font-size: ${calculateFitSize(syl, 1.3, 60)};`;
+                span.innerText = syl;
+                target.appendChild(span);
+                inner.appendChild(target);
+                while (inner.children.length > SCAT_MAX_LINES) inner.removeChild(inner.firstChild);
+            } else {
+                target = last;
+                const span = target.querySelector('.lyric-main');
+                if (span) span.innerText += ' ' + syl;
+                target.dataset.sylCount = String(lastCount + 1);
+            }
+            inner.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('highlight'));
+            target.classList.add('highlight');
+            if (autoScroll) {
+                const container = document.getElementById('lyrics-container');
+                if (container) container.scrollTo({ top: target.offsetTop - (container.offsetHeight / 2) + (target.offsetHeight / 2), behavior: 'smooth' });
+            }
+            if (overlayMode) {
+                const ol = document.getElementById('overlay-line');
+                if (ol) ol.innerText = target.innerText;
+                const ot = document.getElementById('overlay-track');
+                if (ot && currentTitle) ot.innerText = `${currentArtist} - ${currentTitle}`;
+            }
         }
 
 
@@ -1805,6 +1993,7 @@
                     currentTrack = "";
                     availableTrivia = [];
                     currentPalette = [];
+                    stopLiveScat();
                     return;
                 }
 
@@ -1872,6 +2061,7 @@
                 if (currentTrack !== trackId) {
                     currentTrack = trackId;
                     currentActiveLine = -1;
+                    stopLiveScat();
 
                     const savedOffset = localStorage.getItem('sync_offset_' + currentTrack);
                     if (savedOffset !== null && savedOffset !== undefined) {
@@ -1950,7 +2140,9 @@
                         applyDuetParts();
                     } else {
                         isScatMode = true;
+                        stopLiveScat();
                         parsedLyrics = generateScatLyrics(data.genre, data.artist, currentDurationMs);
+                        if (liveScatOn) tryStartLiveScat(currentTrack);
                         if (parsedLyrics.length > 0) {
                             const htmlLines = parsedLyrics.map((l, i) => {
                                 const tilt = (Math.random() * 8 - 4).toFixed(1);
