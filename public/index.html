@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
     <style>
-        :root { --accent-color: #1DB954; }
+        :root { --accent-color: #1DB954; --part-a: #22d3ee; --part-b: #f472b6; }
         body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; }
 
         #bg-art {
@@ -154,13 +154,14 @@
         #interlude-music-note { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); font-size: 2rem; color: var(--accent-color); font-weight: bold; opacity: 0; transition: opacity 0.3s ease; z-index: 5; }
 
         #get-ready-banner {
-            max-width: 700px; width: 90%; margin: 10px auto 0 auto; height: 0px; overflow: hidden;
-            background: rgba(15, 15, 15, 0.85); border: 2px solid transparent; border-radius: 12px;
-            transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease;
+            max-width: 700px; width: 90%; margin: 0 auto; height: 0px; overflow: hidden;
+            background: rgba(15, 15, 15, 0.85); border: 0 solid transparent; border-radius: 12px;
+            transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, margin 0.4s ease, border-width 0.4s ease;
             backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; flex-shrink: 0; z-index: 10;
         }
 
-        #get-ready-banner.active { height: 65px; border-color: var(--accent-color); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 15px var(--accent-color); }
+        #get-ready-banner.active { height: 65px; margin: 10px auto 0 auto; border-width: 2px; border-color: var(--accent-color); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 15px var(--accent-color); }
+        #duet-gr-text { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .get-ready-content { display: flex; align-items: center; gap: 20px; width: 85%; opacity: 0; transition: opacity 0.3s ease; }
         #get-ready-banner.active .get-ready-content { opacity: 1; }
         #get-ready-label { color: var(--accent-color); font-weight: 900; font-size: 1.1rem; letter-spacing: 3px; text-transform: uppercase; white-space: nowrap; }
@@ -255,8 +256,8 @@
             #lyrics-inner { padding: 35vh 0; }
             .lyric-line { padding: 8px 0; }
             .lyric-line.highlight { transform: scale(1.1); }
-            #get-ready-banner { width: 95%; margin-bottom: 5px; border-radius: 8px; }
-            #get-ready-banner.active { height: 55px; }
+            #get-ready-banner { width: 95%; border-radius: 8px; }
+            #get-ready-banner.active { height: 55px; margin: 10px auto 5px auto; }
             .get-ready-content { gap: 12px; width: 90%; }
             #get-ready-label { font-size: 0.9rem; letter-spacing: 1px; }
             #wiki-links-widget { left: 10px; bottom: 10px; padding: 8px 12px; font-size: 0.75rem; max-width: 40vw; }
@@ -279,7 +280,7 @@
         body.overlay-mode #visualizer-canvas,
         body.overlay-mode #milkdrop-canvas,
         body.overlay-mode #ui-layer,
-        body.overlay-mode #top-bar,
+        body.overlay-mode #right-toggles,
         body.overlay-mode #paused-overlay,
         body.overlay-mode #modal-overlay,
         body.overlay-mode #popup-video-bubble,
@@ -294,6 +295,34 @@
         }
         #overlay-track { font-size: 1.1rem; color: rgba(255,255,255,0.75); font-weight: 600; text-shadow: 0 2px 8px #000; margin-bottom: 6px; }
         #overlay-line { font-size: min(3rem, 5.5vw); font-weight: 800; color: #fff; text-shadow: 0 2px 12px #000, 0 0 24px rgba(0,0,0,0.8); line-height: 1.25; }
+
+        /* ---------- Settings panel (slide-out) ---------- */
+        #sp-scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 140; }
+        #sp-scrim.show { opacity: 1; pointer-events: auto; }
+        #settings-panel { position: fixed; top: 0; left: 0; height: 100vh; width: 340px; max-width: 92vw;
+            background: rgba(14,14,16,0.97); border-right: 1px solid rgba(255,255,255,0.12); z-index: 150;
+            transform: translateX(-105%); transition: transform 0.3s cubic-bezier(0.16,1,0.3,1);
+            display: flex; flex-direction: column; backdrop-filter: blur(12px); text-align: left; }
+        #settings-panel.open { transform: translateX(0); }
+        .sp-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+        .sp-header h2 { margin: 0; font-size: 1.2rem; letter-spacing: 1px; }
+        #sp-close { background: none; border: none; color: #fff; font-size: 1.8rem; cursor: pointer; line-height: 1; padding: 0 4px; }
+        #sp-close:hover { color: var(--accent-color); }
+        .sp-body { overflow-y: auto; padding: 4px 20px 30px 20px; }
+        .sp-section { margin-top: 20px; }
+        .sp-section h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 2px; color: var(--accent-color); margin: 0 0 10px 0; }
+        .sp-section .util-btn { display: block; width: 100%; margin-bottom: 8px; text-align: left; border-radius: 10px; box-sizing: border-box; }
+        .sp-section select.util-btn { appearance: auto; }
+        .sp-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .sp-row .util-btn { flex: 1; margin-bottom: 0; text-align: center; }
+        .sp-link { display: block; color: var(--accent-color); text-decoration: none; font-weight: 600; padding: 7px 0; font-size: 0.95rem; }
+        .sp-link:hover { color: #fff; }
+        #singer-a-btn.singer-on { background: var(--part-a) !important; color: #000; border-color: var(--part-a); font-weight: 800; }
+        #singer-b-btn.singer-on { background: var(--part-b) !important; color: #000; border-color: var(--part-b); font-weight: 800; }
+        #live-controls { margin-bottom: 8px; }
+        @media (max-width: 768px) {
+            #settings-panel { width: 100vw; max-width: 100vw; }
+        }
     </style>
 </head>
 <body>
@@ -302,41 +331,9 @@
     <div id="bg-art"></div>
     <div id="top-bar" class="sleeping">
         <div id="left-toggles">
-            <select id="session-selector" class="util-btn" style="display: none;" onchange="changeTargetClient(this.value)" title="Choose which player session to follow"></select>
-
-            <div class="toggle-group">
-                <button class="util-btn" onclick="toggleHighlight()" id="highlight-btn" title="Highlight the currently playing lyric line">Highlight: ON</button>
-                <div id="sync-controls-wrapper" title="Hover for fine sync tuning">
-                    <div id="sync-controls">
-                        <button class="sync-btn" onclick="adjustSync(-1000)" title="-1 Second">-1s</button>
-                        <button class="sync-btn" onclick="adjustSync(-100)" title="-0.1 Seconds">-.1s</button>
-                        <button class="sync-btn" onclick="adjustSync(-50)" title="-0.05 Seconds">-.05s</button>
-                        <span id="sync-display" onclick="resetSync()" title="Click to Reset">0.00s</span>
-                        <button class="sync-btn" onclick="adjustSync(50)" title="+0.05 Seconds">+.05s</button>
-                        <button class="sync-btn" onclick="adjustSync(100)" title="+0.1 Seconds">+.1s</button>
-                        <button class="sync-btn" onclick="adjustSync(1000)" title="+1 Second">+1s</button>
-                    </div>
-                </div>
-            </div>
-
-            <button class="util-btn" onclick="toggleScroll()" id="scroll-btn" title="Auto-scroll to follow the current lyric line">Auto-Scroll: ON</button>
-            <button class="util-btn" onclick="cycleCountdownStyle()" id="countdown-btn" title="Switch the pre-lyrics countdown style">Countdown: Bar</button>
-            <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn" title="Show pop-up music trivia during instrumental breaks">Trivia: ON</button>
-            <button class="util-btn inactive" onclick="cycleShaderVis()" id="vis-btn" title="Cycle shader visualizer backgrounds">Vis: OFF</button>
-            <button class="util-btn inactive" onclick="toggleLiveVis()" id="live-btn" title="Real MilkDrop presets reacting live to mic audio">Live: OFF</button>
-            <span id="live-controls" style="display:none;">
-                <button class="util-btn" onclick="cycleLiveStyle()" id="md-style-btn" title="Switch Live visual style">Style: MilkDrop</button>
-                <button class="util-btn" onclick="nextMilkDropPreset()" id="md-next-btn" title="Skip to the next MilkDrop preset">Next &gt;</button>
-                <button class="util-btn" onclick="toggleMdAutoCycle()" id="md-cycle-btn" title="Automatically change presets every 22 seconds">Cycle: ON</button>
-                <button class="util-btn inactive" onclick="toggleMdLock()" id="md-lock-btn" title="Freeze on this preset and remember it">Lock: OFF</button>
-                <button class="util-btn" onclick="banMilkDropPreset()" id="md-ban-btn" title="Too intense - never show this preset again">Ban</button>
-            </span>
-            <button class="util-btn inactive" onclick="toggleOBSMode()" id="overlay-btn" title="Minimal transparent lyric display for OBS streaming">OBS: OFF</button>
-            <button class="util-btn inactive" onclick="toggleCleanMode()" id="clean-btn" title="Filter explicit words from lyrics">Explicit</button>
-            <button class="util-btn inactive" onclick="toggleRomaji()" id="romaji-btn" title="Show Japanese lyrics as romaji and Korean lyrics in romanized text">Romaji: OFF</button>
+            <button class="util-btn premium-btn" onclick="toggleSettingsPanel()" id="settings-btn" title="Open settings panel">&#x2699; Settings</button>
         </div>
         <div id="right-toggles">
-            <button class="util-btn inactive" onclick="logoutSession()" title="Log out and disconnect the current session">Logout</button>
             <!-- DONATE-BUTTON-START — PayPal donate button.
                  To remove it from your copy, delete everything between
                  DONATE-BUTTON-START and DONATE-BUTTON-END. -->
@@ -358,7 +355,6 @@
             </div>
             </span>
             <!-- DONATE-BUTTON-END -->
-            <button class="util-btn" onclick="toggleFullScreen()" title="Toggle fullscreen mode">&#x26F6; Fullscreen</button>
             <button class="util-btn" onclick="window.open('/help', '_blank')" title="Help and documentation">?</button>
         </div>
     </div>
@@ -395,6 +391,7 @@
                 <div class="get-ready-content">
                     <span id="get-ready-label">Get Ready</span>
                     <div id="countdown-track"><div id="countdown-fill"></div></div>
+                    <span id="duet-gr-text" style="display:none;"></span>
                 </div>
             </div>
         </div>
@@ -454,6 +451,66 @@
 
     <div id="overlay-display"><div id="overlay-track"></div><div id="overlay-line"></div></div>
 
+    <div id="sp-scrim" onclick="toggleSettingsPanel(false)"></div>
+    <div id="settings-panel">
+        <div class="sp-header"><h2>Settings</h2><button id="sp-close" onclick="toggleSettingsPanel(false)" title="Close">&times;</button></div>
+        <div class="sp-body">
+            <div class="sp-section">
+                <h3>Display</h3>
+                <button class="util-btn" onclick="toggleHighlight()" id="highlight-btn" title="Highlight the currently playing lyric line">Highlight: ON</button>
+                <div id="sync-controls-wrapper" title="Fine sync tuning">
+                    <div id="sync-controls">
+                        <button class="sync-btn" onclick="adjustSync(-1000)" title="-1 Second">-1s</button>
+                        <button class="sync-btn" onclick="adjustSync(-100)" title="-0.1 Seconds">-.1s</button>
+                        <button class="sync-btn" onclick="adjustSync(-50)" title="-0.05 Seconds">-.05s</button>
+                        <span id="sync-display" onclick="resetSync()" title="Click to Reset">0.00s</span>
+                        <button class="sync-btn" onclick="adjustSync(50)" title="+0.05 Seconds">+.05s</button>
+                        <button class="sync-btn" onclick="adjustSync(100)" title="+0.1 Seconds">+.1s</button>
+                        <button class="sync-btn" onclick="adjustSync(1000)" title="+1 Second">+1s</button>
+                    </div>
+                </div>
+                <button class="util-btn" onclick="toggleScroll()" id="scroll-btn" title="Auto-scroll to follow the current lyric line">Auto-Scroll: ON</button>
+                <button class="util-btn" onclick="cycleCountdownStyle()" id="countdown-btn" title="Switch the pre-lyrics countdown style">Countdown: Bar</button>
+                <button class="util-btn inactive" onclick="toggleOBSMode()" id="overlay-btn" title="Minimal transparent lyric display for OBS streaming">OBS: OFF</button>
+                <button class="util-btn" onclick="toggleFullScreen()" id="fullscreen-btn" title="Toggle fullscreen mode">&#x26F6; Fullscreen</button>
+            </div>
+            <div class="sp-section">
+                <h3>Visuals</h3>
+                <button class="util-btn inactive" onclick="cycleShaderVis()" id="vis-btn" title="Cycle shader visualizer backgrounds">Vis: OFF</button>
+                <button class="util-btn inactive" onclick="toggleLiveVis()" id="live-btn" title="Real MilkDrop presets reacting live to mic audio">Live: OFF</button>
+                <div id="live-controls" style="display:none;">
+                    <button class="util-btn" onclick="cycleLiveStyle()" id="md-style-btn" title="Switch Live visual style">Style: MilkDrop</button>
+                    <button class="util-btn" onclick="nextMilkDropPreset()" id="md-next-btn" title="Skip to the next MilkDrop preset">Next &gt;</button>
+                    <button class="util-btn" onclick="toggleMdAutoCycle()" id="md-cycle-btn" title="Automatically change presets every 22 seconds">Cycle: ON</button>
+                    <button class="util-btn inactive" onclick="toggleMdLock()" id="md-lock-btn" title="Freeze on this preset and remember it">Lock: OFF</button>
+                    <button class="util-btn" onclick="banMilkDropPreset()" id="md-ban-btn" title="Too intense - never show this preset again">Ban</button>
+                </div>
+            </div>
+            <div class="sp-section">
+                <h3>Lyrics</h3>
+                <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn" title="Show pop-up music trivia during instrumental breaks">Trivia: ON</button>
+                <button class="util-btn inactive" onclick="toggleCleanMode()" id="clean-btn" title="Filter explicit words from lyrics">Explicit</button>
+                <button class="util-btn inactive" onclick="toggleRomaji()" id="romaji-btn" title="Show Japanese lyrics as romaji and Korean lyrics in romanized text">Romaji: OFF</button>
+            </div>
+            <div class="sp-section">
+                <h3>Party &amp; Duet</h3>
+                <button class="util-btn inactive" onclick="toggleDuetMode()" id="duetmode-btn" title="Duet mode: highlight only your part, get a heads-up before your lines">Duet: OFF</button>
+                <div class="sp-row" id="singer-row" style="display:none;">
+                    <button class="util-btn" id="singer-a-btn" onclick="setDuetSinger('A')">I sing A</button>
+                    <button class="util-btn" id="singer-b-btn" onclick="setDuetSinger('B')">I sing B</button>
+                </div>
+                <select id="session-selector" class="util-btn" style="display: none;" onchange="changeTargetClient(this.value)" title="Choose which player session to follow"></select>
+                <a class="sp-link" href="/duet" target="_blank">Open duet view &rarr;</a>
+                <a class="sp-link" href="/party" target="_blank">Open party screen &rarr;</a>
+            </div>
+            <div class="sp-section">
+                <h3>Session</h3>
+                <button class="util-btn inactive" onclick="logoutSession()" id="logout-btn" title="Log out and disconnect the current session">Logout</button>
+            </div>
+        </div>
+    </div>
+
+
     <script>
         const CLIENT_ID = localStorage.getItem('plex_client_id') || ('lyricdeck-' + Math.random().toString(36).substring(2, 15));
         localStorage.setItem('plex_client_id', CLIENT_ID);
@@ -495,10 +552,12 @@
         let currentActiveLine = -1;
         let syncOffsetMs = 0;
 
-        let cleanMode = false;
-        let autoScroll = true;
-        let autoHighlight = true;
-        let showTrivia = true;
+        function lsBool(key, def) { const v = localStorage.getItem(key); return v === null ? !!def : v === '1'; }
+        function lsPersist(key, val) { try { localStorage.setItem(key, val ? '1' : '0'); } catch (e) {} }
+        let cleanMode = lsBool('ld_clean', false);
+        let autoScroll = lsBool('ld_autoscroll', true);
+        let autoHighlight = lsBool('ld_highlight', true);
+        let showTrivia = lsBool('ld_trivia', true);
         let mouseTimer = null;
 
         let selectedLrcId = null;
@@ -507,7 +566,7 @@
         let currentPalette = [];
 
         // Romaji (v2)
-        let romajiMode = false;
+        let romajiMode = lsBool('ld_romaji', false);
         let romajiCache = {};
 
         // WebGL Visualizers
@@ -833,12 +892,13 @@
             animFrameId = requestAnimationFrame(renderWebGL);
         }
 
-        let overlayMode = false;
+        let overlayMode = lsBool('ld_obs', false);
         let lastOverlayText = '';
         let lastOverlayTrack = '';
 
         function toggleOBSMode() {
             overlayMode = !overlayMode;
+            lsPersist('ld_obs', overlayMode);
             document.body.classList.toggle('overlay-mode', overlayMode);
             const btn = document.getElementById('overlay-btn');
             btn.innerText = overlayMode ? 'OBS: ON' : 'OBS: OFF';
@@ -1153,6 +1213,7 @@
             if (liveVisActive) toggleLiveVis();
             currentVisIndex++;
             if (currentVisIndex > visualizerShaders.length) currentVisIndex = 0;
+            try { localStorage.setItem('ld_visindex', String(currentVisIndex)); } catch (e) {}
 
             const btn = document.getElementById('vis-btn');
             const canvas = document.getElementById('visualizer-canvas');
@@ -1291,6 +1352,7 @@
 
         function toggleCleanMode() {
             cleanMode = !cleanMode;
+            lsPersist('ld_clean', cleanMode);
             const btn = document.getElementById('clean-btn');
             btn.innerText = cleanMode ? "Clean" : "Explicit";
             btn.classList.toggle('inactive', !cleanMode);
@@ -1299,6 +1361,7 @@
 
         async function toggleRomaji() {
             romajiMode = !romajiMode;
+            lsPersist('ld_romaji', romajiMode);
             const btn = document.getElementById('romaji-btn');
             btn.innerText = romajiMode ? "Romaji: ON" : "Romaji: OFF";
             btn.classList.toggle('inactive', !romajiMode);
@@ -1343,6 +1406,7 @@
 
         function toggleHighlight() {
             autoHighlight = !autoHighlight;
+            lsPersist('ld_highlight', autoHighlight);
             const btn = document.getElementById('highlight-btn');
             const syncWrap = document.getElementById('sync-controls-wrapper');
             btn.innerText = autoHighlight ? "Highlight: ON" : "Highlight: OFF";
@@ -1359,6 +1423,7 @@
 
         function toggleScroll() {
             autoScroll = !autoScroll;
+            lsPersist('ld_autoscroll', autoScroll);
             const btn = document.getElementById('scroll-btn');
             btn.innerText = autoScroll ? "Auto-Scroll: ON" : "Auto-Scroll: OFF";
             btn.classList.toggle('inactive', !autoScroll);
@@ -1419,8 +1484,96 @@
         }
         setInterval(() => refreshMainDuet(true), 15000);
 
+        // ---------- Settings panel ----------
+        function toggleSettingsPanel(force) {
+            const p = document.getElementById('settings-panel');
+            const scrim = document.getElementById('sp-scrim');
+            const open = (force !== undefined) ? !!force : !p.classList.contains('open');
+            p.classList.toggle('open', open);
+            scrim.classList.toggle('show', open);
+        }
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleSettingsPanel(false); });
+
+        // ---------- Duet mode on the main display ----------
+        let duetMode = lsBool('ld_duetmode', false);
+        let myDuetSinger = localStorage.getItem('duet_singer') || 'A';
+        function toggleDuetMode() {
+            duetMode = !duetMode;
+            lsPersist('ld_duetmode', duetMode);
+            syncDuetUI();
+            if (duetMode) refreshMainDuet(true);
+        }
+        function setDuetSinger(s) {
+            myDuetSinger = s;
+            try { localStorage.setItem('duet_singer', s); } catch (e) {}
+            syncDuetUI();
+        }
+        function syncDuetUI() {
+            const b = document.getElementById('duetmode-btn');
+            if (b) {
+                b.innerText = duetMode ? 'Duet: ON' : 'Duet: OFF';
+                b.classList.toggle('inactive', !duetMode);
+                b.classList.toggle('premium-btn', duetMode);
+            }
+            const sa = document.getElementById('singer-a-btn');
+            const sb2 = document.getElementById('singer-b-btn');
+            if (sa) sa.classList.toggle('singer-on', myDuetSinger === 'A');
+            if (sb2) sb2.classList.toggle('singer-on', myDuetSinger === 'B');
+            const row = document.getElementById('singer-row');
+            if (row) row.style.display = duetMode ? 'flex' : 'none';
+        }
+        function duetPartOf(i) {
+            if (isScatMode || !parsedLyrics || !parsedLyrics.length) return 'both';
+            const el = document.getElementById('line-' + i);
+            const p = el ? el.getAttribute('data-part') : null;
+            return (p === 'A' || p === 'B') ? p : 'both';
+        }
+        function isMyDuetPart(i) { const p = duetPartOf(i); return p === 'both' || p === myDuetSinger; }
+        function computeDuetGetReady(nowMs, activeIndex) {
+            if (!duetMode || isScatMode || !parsedLyrics.length) return null;
+            if (activeIndex >= 0 && isMyDuetPart(activeIndex)) return null;
+            for (let i = activeIndex + 1; i < parsedLyrics.length; i++) {
+                if (isMyDuetPart(i)) {
+                    const wait = parsedLyrics[i].timeMs - nowMs;
+                    if (wait > 0 && wait <= 8000) return { text: parsedLyrics[i].text, inSec: Math.ceil(wait / 1000) };
+                    return null;
+                }
+            }
+            return null;
+        }
+        function setDuetGrText(t) {
+            const el = document.getElementById('duet-gr-text');
+            const track = document.getElementById('countdown-track');
+            if (!el || !track) return;
+            if (t) { el.innerText = t; el.style.display = ''; track.style.display = 'none'; }
+            else { el.style.display = 'none'; track.style.display = ''; }
+        }
+
+        // ---------- Restore persisted settings on load ----------
+        function syncAllSettingsUI() {
+            const hb = document.getElementById('highlight-btn');
+            if (hb) { hb.innerText = autoHighlight ? 'Highlight: ON' : 'Highlight: OFF'; hb.classList.toggle('inactive', !autoHighlight); }
+            const sw = document.getElementById('sync-controls-wrapper');
+            if (sw) { sw.style.display = autoHighlight ? 'flex' : 'none'; sw.style.opacity = autoHighlight ? '1' : '0'; }
+            const sb = document.getElementById('scroll-btn');
+            if (sb) { sb.innerText = autoScroll ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF'; sb.classList.toggle('inactive', !autoScroll); }
+            const tb = document.getElementById('trivia-btn');
+            if (tb) { tb.innerText = showTrivia ? 'Trivia: ON' : 'Trivia: OFF'; tb.classList.toggle('inactive', !showTrivia); }
+            const cb = document.getElementById('clean-btn');
+            if (cb) { cb.innerText = cleanMode ? 'Clean' : 'Explicit'; cb.classList.toggle('inactive', !cleanMode); }
+            const rb = document.getElementById('romaji-btn');
+            if (rb) { rb.innerText = romajiMode ? 'Romaji: ON' : 'Romaji: OFF'; rb.classList.toggle('inactive', !romajiMode); }
+            const ob = document.getElementById('overlay-btn');
+            if (ob) { ob.innerText = overlayMode ? 'OBS: ON' : 'OBS: OFF'; ob.classList.toggle('inactive', !overlayMode); ob.classList.toggle('premium-btn', overlayMode); }
+            document.body.classList.toggle('overlay-mode', overlayMode);
+            syncCountdownBtn();
+            syncDuetUI();
+        }
+
+
         function toggleTrivia() {
             showTrivia = !showTrivia;
+            lsPersist('ld_trivia', showTrivia);
             const btn = document.getElementById('trivia-btn');
             btn.innerText = showTrivia ? "Trivia: ON" : "Trivia: OFF";
             btn.classList.toggle('inactive', !showTrivia);
@@ -1589,6 +1742,12 @@
         function startApp() {
             document.getElementById('auth-section').style.display = 'none';
             document.getElementById('app-section').style.display = 'flex';
+            syncAllSettingsUI();
+            const savedVis = parseInt(localStorage.getItem('ld_visindex') || '0', 10) || 0;
+            if (savedVis > 0 && savedVis <= visualizerShaders.length) {
+                currentVisIndex = savedVis - 1;
+                cycleShaderVis();
+            }
             pollLoop();
             requestAnimationFrame(renderSync);
         }
@@ -1931,8 +2090,11 @@
 
                     document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('upcoming-preview'));
 
+                    const duetGr = (!showCountdown && duetMode) ? computeDuetGetReady(estimatedCurrentMs, activeIndex) : null;
+
                     if (autoHighlight) {
                         if (showCountdown) {
+                            setDuetGrText(null);
                             musicNote.style.opacity = 0;
                             const cdProgress = Math.max(0, Math.min(100, ((5000 - timeToNext) / 5000) * 100));
                             if (countdownStyle === 'big') {
@@ -1947,7 +2109,14 @@
                             upNextWidget.style.opacity = 0;
                             const upcomingEl = document.getElementById(`line-${upcomingIndex}`);
                             if (upcomingEl && upcomingIndex < parsedLyrics.length && parsedLyrics[upcomingIndex].text !== "") upcomingEl.classList.add('upcoming-preview');
+                        } else if (duetGr) {
+                            musicNote.style.opacity = 0;
+                            cdOverlay.classList.remove('active');
+                            getReadyBanner.classList.add('active');
+                            setDuetGrText('"' + duetGr.text + '" \u2014 in ' + duetGr.inSec + 's');
+                            upNextWidget.style.opacity = 0;
                         } else if (isLongGap) {
+                            setDuetGrText(null);
                             getReadyBanner.classList.remove('active');
                             cdOverlay.classList.remove('active');
                             musicNote.style.opacity = 0.3;
@@ -1956,12 +2125,14 @@
                                 upNextWidget.style.opacity = 1;
                             }
                         } else {
+                            setDuetGrText(null);
                             musicNote.style.opacity = 0;
                             getReadyBanner.classList.remove('active');
                             cdOverlay.classList.remove('active');
                             upNextWidget.style.opacity = 0;
                         }
                     } else {
+                        setDuetGrText(null);
                         getReadyBanner.classList.remove('active');
                         if (isLongGap && nextLineMs === Infinity && currentNextTrack) {
                             document.getElementById('next-title').innerText = sanitizeText(`${currentNextTrack.title} - ${currentNextTrack.artist}`);
@@ -1986,6 +2157,7 @@
                         const activeEl = document.getElementById(`line-${activeIndex}`);
                         if (activeEl) {
                             if (isLongGap || showCountdown || activeLineIsEmpty) activeEl.classList.remove('highlight');
+                            else if (autoHighlight && duetMode && !isMyDuetPart(activeIndex)) activeEl.classList.remove('highlight');
                             else if (autoHighlight) activeEl.classList.add('highlight');
                         }
                     }
