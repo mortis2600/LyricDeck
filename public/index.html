@@ -2158,6 +2158,7 @@
                     setTimeout(() => container.style.scrollBehavior = 'smooth', 50);
                 } else if (data.syncedLyrics && isScatMode) {
                     isScatMode = false;
+                    stopLiveScat();
                     parsedLyrics = parseLRC(data.syncedLyrics);
                     const container = document.getElementById('lyrics-container');
                     const htmlLines = parsedLyrics.map((l, i) => {
