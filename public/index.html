@@ -24,6 +24,11 @@
             pointer-events: none;
             background-color: #000;
         }
+        #wave-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; opacity: 0; transition: opacity 1.5s ease;
+            pointer-events: none;
+        }
         #milkdrop-canvas {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 1; opacity: 0; transition: opacity 1.5s ease;
@@ -279,6 +284,7 @@
         body.overlay-mode #bg-art,
         body.overlay-mode #visualizer-canvas,
         body.overlay-mode #milkdrop-canvas,
+        body.overlay-mode #wave-canvas,
         body.overlay-mode #ui-layer,
         body.overlay-mode #right-toggles,
         body.overlay-mode #paused-overlay,
@@ -328,6 +334,7 @@
 <body>
     <canvas id="visualizer-canvas"></canvas>
     <canvas id="milkdrop-canvas"></canvas>
+    <canvas id="wave-canvas"></canvas>
     <div id="bg-art"></div>
     <div id="top-bar" class="sleeping">
         <div id="left-toggles">
@@ -716,6 +723,10 @@
                     gl_FragColor = vec4(col, 1.0);
                 }
                 `
+            },
+            {
+                name: "Wave",
+                mic: true
             }
         ];
 
@@ -906,6 +917,7 @@
             btn.classList.toggle('inactive', !overlayMode);
             btn.classList.toggle('premium-btn', overlayMode);
             if (overlayMode) updateOverlayDisplay();
+            pushDisplaySettings();
         }
 
         function updateOverlayDisplay() {
@@ -924,8 +936,38 @@
             }
         }
 
+        // ---------- Shared mic: one stream, one context, per-consumer analysers ----------
+        // MilkDrop, Live Scat and the Wave visualizer all tap the same mic stream so we
+        // never open the microphone twice. Each consumer gets its own AnalyserNode.
+        let micCtx = null, micStream = null, micSrcNode = null, micStarting = false;
+        async function ensureMic() {
+            if (micStream && micStream.active && micCtx) {
+                if (micCtx.state === 'suspended') { try { await micCtx.resume(); } catch (e) {} }
+                return true;
+            }
+            if (micStarting) return false;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+            micStarting = true;
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                });
+                micCtx = new (window.AudioContext || window.webkitAudioContext)();
+                micSrcNode = micCtx.createMediaStreamSource(micStream);
+                micStarting = false;
+                return true;
+            } catch (e) { micStarting = false; return false; }
+        }
+        function makeMicAnalyser(fftSize, smoothing) {
+            const a = micCtx.createAnalyser();
+            a.fftSize = fftSize;
+            a.smoothingTimeConstant = smoothing;
+            micSrcNode.connect(a);
+            return a;
+        }
+
         // ---------- MilkDrop Live: real MilkDrop presets (butterchurn) driven by mic audio ----------
-        let mdVisualizer = null, mdAudioCtx = null, mdStream = null;
+        let mdVisualizer = null;
         let mdRafId = null, mdPresetTimer = null, mdPresetKeys = [], mdStarting = false;
         let liveVisActive = false, mdAutoCycle = true, mdBcp = null;
         let liveStyle = 'milkdrop', mdCurrentPresetKey = null;
@@ -944,7 +986,7 @@
             if (mdRafId) { cancelAnimationFrame(mdRafId); mdRafId = null; }
             if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
             if (mdPresetTimer) { clearInterval(mdPresetTimer); mdPresetTimer = null; }
-            if (mdAudioCtx && mdAudioCtx.state === 'running') mdAudioCtx.suspend();
+            // shared micCtx stays running: Live Scat / Wave may still be listening
             const c = document.getElementById('milkdrop-canvas');
             if (c) c.style.opacity = '0';
             const vc = document.getElementById('visualizer-canvas');
@@ -967,21 +1009,15 @@
                 if (!mdBcp || typeof mdBcp.getPresets !== 'function') throw new Error('MilkDrop presets failed to load.');
                 if (!mdVisualizer) {
                     mdStarting = true;
-                    mdStream = await navigator.mediaDevices.getUserMedia({
-                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-                    });
-                    mdAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    const srcNode = mdAudioCtx.createMediaStreamSource(mdStream);
-                    mdVisualizer = bc.createVisualizer(mdAudioCtx, mdCanvas, {
+                    const ok = await ensureMic();
+                    if (!ok) { mdStarting = false; throw new Error('Microphone is unavailable here (insecure context).'); }
+                    mdVisualizer = bc.createVisualizer(micCtx, mdCanvas, {
                         width: Math.max(2, Math.floor(window.innerWidth * 0.5)),
                         height: Math.max(2, Math.floor(window.innerHeight * 0.5)),
                         pixelRatio: 1, textureRatio: 1
                     });
-                    mdVisualizer.connectAudio(srcNode);
-                    mdAnalyser = mdAudioCtx.createAnalyser();
-                    mdAnalyser.fftSize = 256;
-                    mdAnalyser.smoothingTimeConstant = 0.75;
-                    srcNode.connect(mdAnalyser);
+                    mdVisualizer.connectAudio(micSrcNode);
+                    mdAnalyser = makeMicAnalyser(256, 0.75);
                     const allPresets = mdBcp.getPresets();
                     mdPresetKeys = Object.keys(allPresets);
                     const lockedKey = localStorage.getItem('milkdrop_locked_preset');
@@ -989,8 +1025,8 @@
                     if (lockedKey && allPresets[lockedKey]) mdAutoCycle = false;
                     mdVisualizer.loadPreset(allPresets[mdCurrentPresetKey], 0);
                     mdStarting = false;
-                } else if (mdAudioCtx.state === 'suspended') {
-                    await mdAudioCtx.resume();
+                } else {
+                    await ensureMic();
                 }
                 setLiveStyle(liveStyle);
             } catch (e) {
@@ -1210,16 +1246,107 @@
             }
         });
 
-        function cycleShaderVis() {
+        // ---------- Wave: live oscilloscope visualizer on the shared mic ----------
+        const WAVE_VIS_INDEX = 6;
+        let waveActive = false, waveRaf = null, waveAnalyser = null, waveToken = 0;
+        let waveTimeData = null, wavePeak = 0, waveCtx2d = null;
+
+        function waveAccent() {
+            const r = Math.round((visAccentCache.r || 0.11) * 255);
+            const g = Math.round((visAccentCache.g || 0.73) * 255);
+            const b = Math.round((visAccentCache.b || 0.33) * 255);
+            return `rgb(${r},${g},${b})`;
+        }
+        function sizeWaveCanvas() {
+            const c = document.getElementById('wave-canvas');
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const w = Math.max(2, Math.floor(c.clientWidth * dpr));
+            const h = Math.max(2, Math.floor(c.clientHeight * dpr));
+            if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+        }
+        async function startWave() {
+            const myToken = ++waveToken;
+            const ok = await ensureMic();
+            if (!ok || myToken !== waveToken) return false;
+            if (!waveAnalyser) {
+                waveAnalyser = makeMicAnalyser(2048, 0.82);
+                waveTimeData = new Float32Array(waveAnalyser.fftSize);
+            }
+            const c = document.getElementById('wave-canvas');
+            if (!waveCtx2d) waveCtx2d = c.getContext('2d');
+            sizeWaveCanvas();
+            c.style.opacity = '1';
+            waveActive = true;
+            wavePeak = 0;
+            waveLoop(myToken);
+            return true;
+        }
+        function stopWave() {
+            waveToken++;
+            waveActive = false;
+            if (waveRaf) { cancelAnimationFrame(waveRaf); waveRaf = null; }
+            const c = document.getElementById('wave-canvas');
+            if (c) c.style.opacity = '0';
+        }
+        function waveLoop(token) {
+            if (!waveActive || token !== waveToken) return;
+            const c = document.getElementById('wave-canvas');
+            const ctx = waveCtx2d;
+            const W = c.width, H = c.height;
+            waveAnalyser.getFloatTimeDomainData(waveTimeData);
+            let peak = 0;
+            const N = waveTimeData.length;
+            for (let i = 0; i < N; i += 8) {
+                const v = Math.abs(waveTimeData[i]);
+                if (v > peak) peak = v;
+            }
+            wavePeak += (peak - wavePeak) * 0.12;
+            ctx.clearRect(0, 0, W, H);
+            const midY = H * 0.52, amp = H * 0.36;
+            const col = waveAccent();
+            const lw = Math.max(2, W / 720);
+            // faint center reference line
+            ctx.globalAlpha = 0.14;
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, midY); ctx.lineTo(W, midY);
+            ctx.stroke();
+            // waveform path (every 2nd sample is plenty at screen resolution)
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = col;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            for (let i = 0; i < N; i += 2) {
+                const x = (i / (N - 1)) * W;
+                const y = midY + waveTimeData[i] * amp;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            // bloom pass: wide and dim
+            ctx.globalAlpha = 0.28 + Math.min(0.4, wavePeak * 0.9);
+            ctx.lineWidth = lw * 5;
+            ctx.stroke();
+            // core pass: thin and bright
+            ctx.globalAlpha = 0.95;
+            ctx.lineWidth = lw;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            waveRaf = requestAnimationFrame(() => waveLoop(token));
+        }
+        window.addEventListener('resize', () => { if (waveActive) sizeWaveCanvas(); });
+
+        async function cycleShaderVis(silent) {
             if (liveVisActive) toggleLiveVis();
             currentVisIndex++;
             if (currentVisIndex > visualizerShaders.length) currentVisIndex = 0;
             try { localStorage.setItem('ld_visindex', String(currentVisIndex)); } catch (e) {}
+            pushDisplaySettings();
 
             const btn = document.getElementById('vis-btn');
             const canvas = document.getElementById('visualizer-canvas');
 
             if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+            stopWave();
 
             if (currentVisIndex === 0) {
                 btn.innerText = "Vis: OFF";
@@ -1231,11 +1358,26 @@
                 btn.innerText = "Vis: " + visDef.name;
                 btn.classList.remove('inactive');
                 btn.classList.add('premium-btn');
-                initWebGL(visDef.fs);
-                canvas.style.opacity = '1';
-                startTime = Date.now();
-                visScale = 0.5; visFrames = 0; visFpsWindow = Date.now(); visLastFrame = 0;
-                renderWebGL();
+                if (visDef.fs) {
+                    initWebGL(visDef.fs);
+                    canvas.style.opacity = '1';
+                    startTime = Date.now();
+                    visScale = 0.5; visFrames = 0; visFpsWindow = Date.now(); visLastFrame = 0;
+                    renderWebGL();
+                } else if (visDef.mic) {
+                    // mic-driven Wave: needs a user tap for the mic, never auto-starts
+                    canvas.style.opacity = '0';
+                    const ok = await startWave();
+                    if (!ok) {
+                        currentVisIndex = 0;
+                        try { localStorage.setItem('ld_visindex', '0'); } catch (e) {}
+                        btn.innerText = "Vis: OFF";
+                        btn.classList.add('inactive');
+                        btn.classList.remove('premium-btn');
+                        pushDisplaySettings(); // report the revert so a remote caller sees OFF
+                        if (!silent) alert('Waveform visualizer needs microphone access. Use the https address and allow the mic when asked.');
+                    }
+                }
             }
         }
 
@@ -1245,6 +1387,7 @@
             const controls = document.getElementById('live-controls');
             if (liveVisActive) {
                 if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+                stopWave();
                 currentVisIndex = 0;
                 document.getElementById('visualizer-canvas').style.opacity = '0';
                 const vbtn = document.getElementById('vis-btn');
@@ -1358,6 +1501,7 @@
             btn.innerText = cleanMode ? "Clean" : "Explicit";
             btn.classList.toggle('inactive', !cleanMode);
             if (currentTrack) currentTrack = "";
+            pushDisplaySettings();
         }
 
         async function toggleRomaji() {
@@ -1371,6 +1515,7 @@
             } else if (currentTrack) {
                 restoreOriginalLyrics();
             }
+            pushDisplaySettings();
         }
 
         function restoreOriginalLyrics() {
@@ -1420,6 +1565,7 @@
                 syncWrap.style.display = 'flex';
                 setTimeout(() => { syncWrap.style.opacity = '1'; }, 10);
             }
+            pushDisplaySettings();
         }
 
         function toggleScroll() {
@@ -1428,6 +1574,7 @@
             const btn = document.getElementById('scroll-btn');
             btn.innerText = autoScroll ? "Auto-Scroll: ON" : "Auto-Scroll: OFF";
             btn.classList.toggle('inactive', !autoScroll);
+            pushDisplaySettings();
         }
 
         let countdownStyle = localStorage.getItem('countdown_style') || 'bar';
@@ -1440,6 +1587,7 @@
             localStorage.setItem('countdown_style', countdownStyle);
             syncCountdownBtn();
             if (countdownStyle === 'bar') document.getElementById('countdown-overlay').classList.remove('active');
+            pushDisplaySettings();
         }
         syncCountdownBtn();
 
@@ -1504,11 +1652,13 @@
             lsPersist('ld_duetmode', duetMode);
             syncDuetUI();
             if (duetMode) refreshMainDuet(true);
+            pushDisplaySettings();
         }
         function setDuetSinger(s) {
             myDuetSinger = s;
             try { localStorage.setItem('duet_singer', s); } catch (e) {}
             syncDuetUI();
+            pushDisplaySettings();
         }
         function syncDuetUI() {
             const b = document.getElementById('duetmode-btn');
@@ -1552,6 +1702,67 @@
         }
 
         // ---------- Restore persisted settings on load ----------
+        // ---------- Shared display settings: every screen follows the server ----------
+        // The server holds the canonical display settings (rev counter). This screen
+        // pushes its own panel changes up, and adopts newer revisions (e.g. from /remote).
+        // Mic-local settings (Live visualizer, Live Scat) are deliberately NOT shared.
+        let displayRev = 0;
+        try { displayRev = parseInt(localStorage.getItem('ld_display_rev') || '0', 10) || 0; } catch (e) {}
+        function currentDisplaySettings() {
+            return {
+                highlight: autoHighlight, autoscroll: autoScroll, countdownStyle: countdownStyle,
+                trivia: showTrivia, visIndex: currentVisIndex, obs: overlayMode,
+                clean: cleanMode, romaji: romajiMode, duetMode: duetMode, singer: myDuetSinger
+            };
+        }
+        async function pushDisplaySettings() {
+            try {
+                const res = await fetch('/api/display/settings', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: currentDisplaySettings() })
+                });
+                const j = await res.json();
+                if (j && typeof j.rev === 'number') {
+                    displayRev = j.rev;
+                    try { localStorage.setItem('ld_display_rev', String(displayRev)); } catch (e) {}
+                }
+            } catch (e) {}
+        }
+        async function syncDisplaySettings() {
+            try {
+                const res = await fetch('/api/display/settings');
+                const j = await res.json();
+                if (!j || typeof j.rev !== 'number') return;
+                if (j.rev === 0) { pushDisplaySettings(); return; } // fresh server: publish local state
+                if (j.rev <= displayRev) return;
+                displayRev = j.rev;
+                try { localStorage.setItem('ld_display_rev', String(displayRev)); } catch (e) {}
+                applyDisplaySettings(j.settings || {});
+            } catch (e) {}
+        }
+        function applyDisplaySettings(srv) {
+            if (!srv || typeof srv !== 'object') return;
+            let cleanChanged = false, romajiChanged = false, duetChanged = false;
+            let visTarget = null;
+            if (typeof srv.highlight === 'boolean' && srv.highlight !== autoHighlight) { autoHighlight = srv.highlight; lsPersist('ld_highlight', autoHighlight); }
+            if (typeof srv.autoscroll === 'boolean' && srv.autoscroll !== autoScroll) { autoScroll = srv.autoscroll; lsPersist('ld_autoscroll', autoScroll); }
+            if ((srv.countdownStyle === 'bar' || srv.countdownStyle === 'big') && srv.countdownStyle !== countdownStyle) { countdownStyle = srv.countdownStyle; try { localStorage.setItem('countdown_style', countdownStyle); } catch (e) {} }
+            if (typeof srv.trivia === 'boolean' && srv.trivia !== showTrivia) { showTrivia = srv.trivia; lsPersist('ld_trivia', showTrivia); }
+            if (Number.isInteger(srv.visIndex) && srv.visIndex >= 0 && srv.visIndex <= visualizerShaders.length && srv.visIndex !== currentVisIndex) visTarget = srv.visIndex;
+            if (typeof srv.obs === 'boolean' && srv.obs !== overlayMode) { overlayMode = srv.obs; lsPersist('ld_obs', overlayMode); }
+            if (typeof srv.clean === 'boolean' && srv.clean !== cleanMode) { cleanMode = srv.clean; lsPersist('ld_clean', cleanMode); cleanChanged = true; }
+            if (typeof srv.romaji === 'boolean' && srv.romaji !== romajiMode) { romajiMode = srv.romaji; lsPersist('ld_romaji', romajiMode); romajiChanged = true; }
+            if (typeof srv.duetMode === 'boolean' && srv.duetMode !== duetMode) { duetMode = srv.duetMode; lsPersist('ld_duetmode', duetMode); duetChanged = true; }
+            if ((srv.singer === 'A' || srv.singer === 'B') && srv.singer !== myDuetSinger) { myDuetSinger = srv.singer; try { localStorage.setItem('duet_singer', myDuetSinger); } catch (e) {} }
+            syncAllSettingsUI();
+            if (visTarget !== null) { currentVisIndex = visTarget - 1; cycleShaderVis(true); }
+            if (duetChanged && duetMode) refreshMainDuet(true);
+            if (cleanChanged && currentTrack) currentTrack = "";
+            if (romajiChanged && currentTrack && parsedLyrics.length > 0 && !isScatMode) {
+                if (romajiMode) applyRomaji(); else restoreOriginalLyrics();
+            }
+        }
+
         function syncAllSettingsUI() {
             const hb = document.getElementById('highlight-btn');
             if (hb) { hb.innerText = autoHighlight ? 'Highlight: ON' : 'Highlight: OFF'; hb.classList.toggle('inactive', !autoHighlight); }
@@ -1605,28 +1816,11 @@
 
         async function ensureScatAnalyser() {
             if (liveVisActive && mdAnalyser) return true; // share MilkDrop's mic
-            if (scatMic.analyser) {
-                if (scatMic.ctx && scatMic.ctx.state === 'suspended') {
-                    try { await scatMic.ctx.resume(); } catch (e) {}
-                }
-                return true;
-            }
-            if (scatMic.starting) return false;
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
-            scatMic.starting = true;
-            try {
-                scatMic.stream = await navigator.mediaDevices.getUserMedia({
-                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-                });
-                scatMic.ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const src = scatMic.ctx.createMediaStreamSource(scatMic.stream);
-                scatMic.analyser = scatMic.ctx.createAnalyser();
-                scatMic.analyser.fftSize = 512;
-                scatMic.analyser.smoothingTimeConstant = 0.55;
-                src.connect(scatMic.analyser);
-                scatMic.starting = false;
-                return true;
-            } catch (e) { scatMic.starting = false; return false; }
+            if (scatMic.analyser) return true;
+            const ok = await ensureMic(); // shared mic stream
+            if (!ok) return false;
+            scatMic.analyser = makeMicAnalyser(512, 0.55);
+            return true;
         }
 
         async function toggleLiveScat() {
@@ -1766,6 +1960,7 @@
             btn.innerText = showTrivia ? "Trivia: ON" : "Trivia: OFF";
             btn.classList.toggle('inactive', !showTrivia);
             if (!showTrivia) document.getElementById('popup-video-bubble').classList.remove('show');
+            pushDisplaySettings();
         }
 
         function toggleFullScreen() {
@@ -1933,9 +2128,15 @@
             syncAllSettingsUI();
             const savedVis = parseInt(localStorage.getItem('ld_visindex') || '0', 10) || 0;
             if (savedVis > 0 && savedVis <= visualizerShaders.length) {
-                currentVisIndex = savedVis - 1;
-                cycleShaderVis();
+                if (savedVis === WAVE_VIS_INDEX) {
+                    currentVisIndex = WAVE_VIS_INDEX - 1; // next tap lands on Wave
+                } else {
+                    currentVisIndex = savedVis - 1;
+                    cycleShaderVis();
+                }
             }
+            syncDisplaySettings();
+            setInterval(syncDisplaySettings, 2500);
             pollLoop();
             requestAnimationFrame(renderSync);
         }

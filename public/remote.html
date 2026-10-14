@@ -32,6 +32,10 @@
 <body>
     <h1>LyricDeck Remote <a href="/help" style="font-size:1rem;color:var(--accent-color);text-decoration:none;" title="Help">?</a></h1>
 
+    <h2>Display Settings</h2>
+    <p style="color:rgba(255,255,255,0.55); font-size:0.9rem; margin:0 0 8px 0;">Controls every display screen. Changes apply within a couple of seconds.</p>
+    <div id="r-settings"><div class="empty">Loading…</div></div>
+
     <div id="join-card" style="display:none; background:#141414; border:1px solid var(--accent-color); border-radius:12px; padding:18px; margin-bottom:16px;">
         <h2 style="margin-top:0;">Join the Party</h2>
         <p style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Enter the 4-letter code from the party screen. No Plex login needed.</p>
@@ -67,6 +71,54 @@
 
     function escapeHtml(s) {
         return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // ---------- Display Settings: mirrors the main screen's settings panel ----------
+    const R_SETTINGS = [
+        { key: 'highlight', label: 'Highlight' },
+        { key: 'autoscroll', label: 'Auto-Scroll' },
+        { key: 'countdownStyle', label: 'Countdown', fmt: v => v === 'big' ? 'Big' : 'Bar', next: v => v === 'big' ? 'bar' : 'big' },
+        { key: 'trivia', label: 'Trivia' },
+        { key: 'visIndex', label: 'Visualizer', fmt: v => ['Off', 'Geiss', 'MilkDrop', 'Void', 'Nebula', 'Rings', 'Wave'][v] || 'Off', next: v => (v + 1) % 7 },
+        { key: 'obs', label: 'OBS Mode' },
+        { key: 'clean', label: 'Clean Lyrics' },
+        { key: 'romaji', label: 'Romaji' },
+        { key: 'duetMode', label: 'Duet Mode' },
+        { key: 'singer', label: 'Singer', fmt: v => 'Singer ' + v, next: v => v === 'A' ? 'B' : 'A' }
+    ];
+    let rSettings = {};
+    async function refreshRemoteSettings() {
+        try {
+            const res = await fetch('/api/display/settings');
+            const j = await res.json();
+            if (!j || !j.settings) return;
+            rSettings = j.settings;
+            const wrap = document.getElementById('r-settings');
+            wrap.innerHTML = '';
+            R_SETTINGS.forEach(def => {
+                const val = rSettings[def.key];
+                const shown = def.fmt ? def.fmt(val) : (val ? 'ON' : 'OFF');
+                const row = document.createElement('div');
+                row.className = 'item';
+                row.innerHTML = `<div class="meta"><div class="t">${escapeHtml(def.label)}</div></div>`;
+                const b = document.createElement('button');
+                b.className = 'ghost';
+                b.style.minWidth = '86px';
+                b.textContent = shown;
+                b.onclick = () => setRemoteSetting(def, def.next ? def.next(val) : !val);
+                row.appendChild(b);
+                wrap.appendChild(row);
+            });
+        } catch (e) {}
+    }
+    async function setRemoteSetting(def, nextVal) {
+        try {
+            await fetch('/api/display/settings', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: { [def.key]: nextVal } })
+            });
+            refreshRemoteSettings();
+        } catch (e) {}
     }
 
     async function joinSession() {
@@ -108,6 +160,8 @@
 
     refreshState();
     setInterval(refreshState, 3000);
+    refreshRemoteSettings();
+    setInterval(refreshRemoteSettings, 3000);
 </script>
 </body>
 </html>

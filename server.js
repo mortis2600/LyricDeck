@@ -352,6 +352,52 @@ app.post('/api/duet/clear', express.json(), (req, res) => {
     res.json({ ok: true });
 });
 
+// ---------- Shared display settings: every bar TV follows the phone ----------
+// Mic-dependent settings (Live visualizer, Live Scat) are deliberately NOT shared:
+// the mic belongs to the device in front of you, not the TV across the room.
+const DISPLAY_SETTING_DEFS = {
+    highlight: 'bool', autoscroll: 'bool', trivia: 'bool', obs: 'bool',
+    clean: 'bool', romaji: 'bool', duetMode: 'bool',
+    countdownStyle: ['bar', 'big'], singer: ['A', 'B'], visIndex: [0, 1, 2, 3, 4, 5, 6]
+};
+const DISPLAY_DEFAULTS = {
+    highlight: true, autoscroll: true, countdownStyle: 'bar', trivia: true,
+    visIndex: 0, obs: false, clean: false, romaji: false, duetMode: false, singer: 'A'
+};
+let displaySettings = Object.assign({}, DISPLAY_DEFAULTS, persisted.displaySettings || {});
+let displaySettingsRev = persisted.displaySettingsRev || 0;
+function sanitizeDisplaySettings(incoming) {
+    const out = {};
+    for (const [k, def] of Object.entries(DISPLAY_SETTING_DEFS)) {
+        if (!(k in incoming)) continue;
+        const v = incoming[k];
+        if (def === 'bool') out[k] = !!v;
+        else if (Array.isArray(def) && def.includes(v)) out[k] = v;
+    }
+    return out;
+}
+app.get('/api/display/settings', (req, res) => {
+    res.json({ rev: displaySettingsRev, settings: displaySettings });
+});
+app.post('/api/display/settings', (req, res) => {
+    const incoming = (req.body && req.body.settings) || {};
+    if (typeof incoming !== 'object' || Array.isArray(incoming)) {
+        return res.status(400).json({ error: 'Bad request' });
+    }
+    const clean = sanitizeDisplaySettings(incoming);
+    let changed = false;
+    for (const [k, v] of Object.entries(clean)) {
+        if (displaySettings[k] !== v) { displaySettings[k] = v; changed = true; }
+    }
+    if (changed) {
+        displaySettingsRev++;
+        persisted.displaySettings = displaySettings;
+        persisted.displaySettingsRev = displaySettingsRev;
+        savePersist();
+    }
+    res.json({ rev: displaySettingsRev, settings: displaySettings });
+});
+
 // ---------- Session code: link phones without Plex login ----------
 app.get('/api/session/code', (req, res) => {
     res.json({ code: sessionCode });
