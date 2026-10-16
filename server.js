@@ -356,12 +356,12 @@ app.post('/api/duet/clear', express.json(), (req, res) => {
 // Mic-dependent settings (Live visualizer, Live Scat) are deliberately NOT shared:
 // the mic belongs to the device in front of you, not the TV across the room.
 const DISPLAY_SETTING_DEFS = {
-    highlight: 'bool', autoscroll: 'bool', trivia: 'bool', obs: 'bool',
+    highlight: 'bool', autoscroll: 'bool', trivia: 'bool', factoids: 'bool', obs: 'bool',
     clean: 'bool', romaji: 'bool', duetMode: 'bool',
     countdownStyle: ['bar', 'big'], singer: ['A', 'B'], visIndex: [0, 1, 2, 3, 4, 5, 6]
 };
 const DISPLAY_DEFAULTS = {
-    highlight: true, autoscroll: true, countdownStyle: 'bar', trivia: true,
+    highlight: true, autoscroll: true, countdownStyle: 'bar', trivia: true, factoids: true,
     visIndex: 0, obs: false, clean: false, romaji: false, duetMode: false, singer: 'A'
 };
 let displaySettings = Object.assign({}, DISPLAY_DEFAULTS, persisted.displaySettings || {});

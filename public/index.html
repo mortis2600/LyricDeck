@@ -6,6 +6,7 @@
     <title>LyricDeck</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
+    <script src="/vendor/qrcode.min.js"></script>
     <style>
         :root { --accent-color: #1DB954; --part-a: #22d3ee; --part-b: #f472b6; }
         body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; }
@@ -28,6 +29,43 @@
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 1; opacity: 0; transition: opacity 1.5s ease;
             pointer-events: none;
+        }
+        /* Trivia bar: endless solo music quiz, LyricDeck style */
+        #trivia-bar {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+            height: 26vh; min-height: 170px;
+            display: flex; align-items: center; gap: 18px;
+            background: rgba(0, 0, 0, 0.78);
+            backdrop-filter: blur(18px) saturate(1.1); -webkit-backdrop-filter: blur(18px) saturate(1.1);
+            border-top: 2px solid var(--accent-color);
+            padding: 12px 20px;
+            transform: translateY(110%); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: none;
+        }
+        #tb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; height: 100%; }
+        #tb-qr-wrap { flex-shrink: 0; text-align: center; }
+        #tb-qr img, #tb-qr canvas, #tb-qr table { width: 118px !important; height: 118px !important; border-radius: 8px; background: #fff; padding: 5px; }
+        #tb-qr-label { font-size: 0.62rem; letter-spacing: 2px; color: var(--accent-color); font-weight: 800; margin-top: 4px; }
+        body.trivia-bar-on #trivia-bar { transform: translateY(0); }
+        body.trivia-bar-on #lyrics-container { padding-bottom: calc(max(26vh, 170px) + 24px); }
+        #tb-cat { font-size: 0.7rem; letter-spacing: 2px; color: var(--accent-color); font-weight: 800; margin-bottom: 4px; }
+        #tb-question { font-size: 1.15rem; font-weight: 700; line-height: 1.35; margin-bottom: 2px; }
+        #tb-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        .tb-answer {
+            padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-weight: 600;
+            background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14);
+            display: flex; align-items: center;
+            transition: background 0.3s, opacity 0.3s;
+        }
+        .tb-answer.correct { background: var(--accent-color); border-color: var(--accent-color); color: #000; }
+        .tb-answer.dim { opacity: 0.3; }
+        #tb-timer { height: 3px; background: rgba(255, 255, 255, 0.1); margin-top: 9px; border-radius: 2px; overflow: hidden; }
+        #tb-timer-fill { height: 100%; background: var(--accent-color); width: 100%; border-radius: 2px; }
+        @media (max-width: 700px) {
+            #tb-qr-wrap { display: none; }
+            #trivia-bar { min-height: 150px; }
+            #tb-question { font-size: 0.95rem; }
+            .tb-answer { font-size: 0.8rem; padding: 6px 10px; }
         }
         #milkdrop-canvas {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -285,6 +323,7 @@
         body.overlay-mode #visualizer-canvas,
         body.overlay-mode #milkdrop-canvas,
         body.overlay-mode #wave-canvas,
+        body.overlay-mode #trivia-bar,
         body.overlay-mode #ui-layer,
         body.overlay-mode #right-toggles,
         body.overlay-mode #paused-overlay,
@@ -335,6 +374,18 @@
     <canvas id="visualizer-canvas"></canvas>
     <canvas id="milkdrop-canvas"></canvas>
     <canvas id="wave-canvas"></canvas>
+    <div id="trivia-bar" aria-live="polite">
+        <div id="tb-main">
+            <div id="tb-cat">MUSIC TRIVIA</div>
+            <div id="tb-question"></div>
+            <div id="tb-answers"></div>
+            <div id="tb-timer"><div id="tb-timer-fill"></div></div>
+        </div>
+        <div id="tb-qr-wrap" title="Scan to open LyricDeck Remote on your phone">
+            <div id="tb-qr"></div>
+            <div id="tb-qr-label">JOIN</div>
+        </div>
+    </div>
     <div id="bg-art"></div>
     <div id="top-bar" class="sleeping">
         <div id="left-toggles">
@@ -495,7 +546,8 @@
             </div>
             <div class="sp-section">
                 <h3>Lyrics</h3>
-                <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn" title="Show pop-up music trivia during instrumental breaks">Trivia: ON</button>
+                <button class="util-btn" onclick="toggleTrivia()" id="trivia-btn" title="Music quiz bar at the bottom of the screen">Trivia: ON</button>
+                <button class="util-btn" onclick="toggleFactoids()" id="factoids-btn" title="Show pop-up music factoids during instrumental breaks">Factoids: ON</button>
                 <button class="util-btn inactive" onclick="toggleCleanMode()" id="clean-btn" title="Filter explicit words from lyrics">Explicit</button>
                 <button class="util-btn inactive" onclick="toggleRomaji()" id="romaji-btn" title="Show Japanese lyrics as romaji and Korean lyrics in romanized text">Romaji: OFF</button>
                 <button class="util-btn inactive" onclick="toggleLiveScat()" id="livescat-btn" title="Live Scat: for songs with no lyrics, scat along to the music live through the mic">Live Scat: OFF</button>
@@ -566,6 +618,7 @@
         let autoScroll = lsBool('ld_autoscroll', true);
         let autoHighlight = lsBool('ld_highlight', true);
         let showTrivia = lsBool('ld_trivia', true);
+        let showFactoids = lsBool('ld_factoids', true);
         let mouseTimer = null;
 
         let selectedLrcId = null;
@@ -1711,7 +1764,7 @@
         function currentDisplaySettings() {
             return {
                 highlight: autoHighlight, autoscroll: autoScroll, countdownStyle: countdownStyle,
-                trivia: showTrivia, visIndex: currentVisIndex, obs: overlayMode,
+                trivia: showTrivia, factoids: showFactoids, visIndex: currentVisIndex, obs: overlayMode,
                 clean: cleanMode, romaji: romajiMode, duetMode: duetMode, singer: myDuetSinger
             };
         }
@@ -1742,12 +1795,13 @@
         }
         function applyDisplaySettings(srv) {
             if (!srv || typeof srv !== 'object') return;
-            let cleanChanged = false, romajiChanged = false, duetChanged = false;
+            let cleanChanged = false, romajiChanged = false, duetChanged = false, triviaChanged = false;
             let visTarget = null;
             if (typeof srv.highlight === 'boolean' && srv.highlight !== autoHighlight) { autoHighlight = srv.highlight; lsPersist('ld_highlight', autoHighlight); }
             if (typeof srv.autoscroll === 'boolean' && srv.autoscroll !== autoScroll) { autoScroll = srv.autoscroll; lsPersist('ld_autoscroll', autoScroll); }
             if ((srv.countdownStyle === 'bar' || srv.countdownStyle === 'big') && srv.countdownStyle !== countdownStyle) { countdownStyle = srv.countdownStyle; try { localStorage.setItem('countdown_style', countdownStyle); } catch (e) {} }
-            if (typeof srv.trivia === 'boolean' && srv.trivia !== showTrivia) { showTrivia = srv.trivia; lsPersist('ld_trivia', showTrivia); }
+            if (typeof srv.trivia === 'boolean' && srv.trivia !== showTrivia) { showTrivia = srv.trivia; lsPersist('ld_trivia', showTrivia); triviaChanged = true; }
+            if (typeof srv.factoids === 'boolean' && srv.factoids !== showFactoids) { showFactoids = srv.factoids; lsPersist('ld_factoids', showFactoids); }
             if (Number.isInteger(srv.visIndex) && srv.visIndex >= 0 && srv.visIndex <= visualizerShaders.length && srv.visIndex !== currentVisIndex) visTarget = srv.visIndex;
             if (typeof srv.obs === 'boolean' && srv.obs !== overlayMode) { overlayMode = srv.obs; lsPersist('ld_obs', overlayMode); }
             if (typeof srv.clean === 'boolean' && srv.clean !== cleanMode) { cleanMode = srv.clean; lsPersist('ld_clean', cleanMode); cleanChanged = true; }
@@ -1756,6 +1810,7 @@
             if ((srv.singer === 'A' || srv.singer === 'B') && srv.singer !== myDuetSinger) { myDuetSinger = srv.singer; try { localStorage.setItem('duet_singer', myDuetSinger); } catch (e) {} }
             syncAllSettingsUI();
             if (visTarget !== null) { currentVisIndex = visTarget - 1; cycleShaderVis(true); }
+            if (triviaChanged) { if (showTrivia) tbStart(); else tbStop(); }
             if (duetChanged && duetMode) refreshMainDuet(true);
             if (cleanChanged && currentTrack) currentTrack = "";
             if (romajiChanged && currentTrack && parsedLyrics.length > 0 && !isScatMode) {
@@ -1772,6 +1827,8 @@
             if (sb) { sb.innerText = autoScroll ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF'; sb.classList.toggle('inactive', !autoScroll); }
             const tb = document.getElementById('trivia-btn');
             if (tb) { tb.innerText = showTrivia ? 'Trivia: ON' : 'Trivia: OFF'; tb.classList.toggle('inactive', !showTrivia); }
+            const fb = document.getElementById('factoids-btn');
+            if (fb) { fb.innerText = showFactoids ? 'Factoids: ON' : 'Factoids: OFF'; fb.classList.toggle('inactive', !showFactoids); }
             const cb = document.getElementById('clean-btn');
             if (cb) { cb.innerText = cleanMode ? 'Clean' : 'Explicit'; cb.classList.toggle('inactive', !cleanMode); }
             const rb = document.getElementById('romaji-btn');
@@ -1959,7 +2016,16 @@
             const btn = document.getElementById('trivia-btn');
             btn.innerText = showTrivia ? "Trivia: ON" : "Trivia: OFF";
             btn.classList.toggle('inactive', !showTrivia);
-            if (!showTrivia) document.getElementById('popup-video-bubble').classList.remove('show');
+            if (showTrivia) tbStart(); else tbStop();
+            pushDisplaySettings();
+        }
+        function toggleFactoids() {
+            showFactoids = !showFactoids;
+            lsPersist('ld_factoids', showFactoids);
+            const btn = document.getElementById('factoids-btn');
+            btn.innerText = showFactoids ? "Factoids: ON" : "Factoids: OFF";
+            btn.classList.toggle('inactive', !showFactoids);
+            if (!showFactoids) document.getElementById('popup-video-bubble').classList.remove('show');
             pushDisplaySettings();
         }
 
@@ -2137,13 +2203,14 @@
             }
             syncDisplaySettings();
             setInterval(syncDisplaySettings, 2500);
+            if (showTrivia) tbStart();
             pollLoop();
             requestAnimationFrame(renderSync);
         }
 
         async function pollLoop() {
             await fetchNowPlaying();
-            setTimeout(pollLoop, 1000);
+            setTimeout(pollLoop, 250);
         }
 
         async function fetchNowPlaying() {
@@ -2393,8 +2460,109 @@
             return result;
         }
 
+        // ---------- Trivia Bar: endless solo music quiz (OpenTDB), LyricDeck style, no ads ----------
+        let tbQuestions = [];
+        let tbState = 'idle'; // idle | question | reveal
+        let tbTimerEnd = 0, tbTimerDur = 1, tbRaf = null;
+        const TB_QUESTION_MS = 15000, TB_REVEAL_MS = 6000;
+        function tbDecode(s) { const t = document.createElement('textarea'); t.innerHTML = s; return t.value; }
+        let tbRefilling = false;
+        async function tbRefill() {
+            if (tbRefilling) return;
+            tbRefilling = true;
+            try {
+                const res = await fetch('https://opentdb.com/api.php?amount=10&category=12&type=multiple');
+                const j = await res.json();
+                if (j.response_code === 0 && Array.isArray(j.results)) {
+                    j.results.forEach(q => {
+                        const answers = q.incorrect_answers.map(tbDecode);
+                        answers.push(tbDecode(q.correct_answer));
+                        for (let i = answers.length - 1; i > 0; i--) {
+                            const k = Math.floor(Math.random() * (i + 1));
+                            const tmp = answers[i]; answers[i] = answers[k]; answers[k] = tmp;
+                        }
+                        tbQuestions.push({ q: tbDecode(q.question), correct: tbDecode(q.correct_answer), answers });
+                    });
+                }
+            } catch (e) {}
+            tbRefilling = false;
+        }
+        function tbNext() {
+            if (!showTrivia) { tbState = 'idle'; return; }
+            if (tbQuestions.length < 3) tbRefill();
+            const item = tbQuestions.shift();
+            if (!item) {
+                document.getElementById('tb-question').innerText = 'Loading trivia…';
+                document.getElementById('tb-answers').innerHTML = '';
+                setTimeout(() => { if (showTrivia && tbState !== 'idle') tbNext(); }, 5000);
+                return;
+            }
+            tbState = 'question';
+            document.getElementById('tb-question').innerText = item.q;
+            const ansWrap = document.getElementById('tb-answers');
+            ansWrap.innerHTML = '';
+            item.answers.forEach(a => {
+                const d = document.createElement('div');
+                d.className = 'tb-answer';
+                d.innerText = a;
+                if (a === item.correct) d.dataset.correct = '1';
+                ansWrap.appendChild(d);
+            });
+            tbTimerDur = TB_QUESTION_MS; tbTimerEnd = performance.now() + TB_QUESTION_MS;
+            tbTick();
+        }
+        function tbReveal() {
+            if (!showTrivia) { tbState = 'idle'; return; }
+            tbState = 'reveal';
+            document.querySelectorAll('#tb-answers .tb-answer').forEach(el => {
+                if (el.dataset.correct) el.classList.add('correct');
+                else el.classList.add('dim');
+            });
+            tbTimerDur = TB_REVEAL_MS; tbTimerEnd = performance.now() + TB_REVEAL_MS;
+            tbTick();
+        }
+        function tbTick() {
+            if (tbRaf) cancelAnimationFrame(tbRaf);
+            const step = () => {
+                if (!showTrivia) { tbState = 'idle'; return; }
+                const remain = tbTimerEnd - performance.now();
+                const fill = document.getElementById('tb-timer-fill');
+                if (fill) fill.style.width = (Math.max(0, remain / tbTimerDur) * 100) + '%';
+                if (remain <= 0) {
+                    if (tbState === 'question') tbReveal();
+                    else if (tbState === 'reveal') tbNext();
+                    return;
+                }
+                tbRaf = requestAnimationFrame(step);
+            };
+            tbRaf = requestAnimationFrame(step);
+        }
+        function tbMakeQR() {
+            try {
+                const el = document.getElementById('tb-qr');
+                if (!el || el.dataset.done) return;
+                el.innerHTML = '';
+                new QRCode(el, {
+                    text: window.location.origin + '/remote',
+                    width: 118, height: 118,
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                el.dataset.done = '1';
+            } catch (e) {}
+        }
+        function tbStart() {
+            document.body.classList.add('trivia-bar-on');
+            tbMakeQR();
+            tbRefill().then(() => { if (showTrivia && tbState === 'idle') tbNext(); });
+        }
+        function tbStop() {
+            tbState = 'idle';
+            if (tbRaf) { cancelAnimationFrame(tbRaf); tbRaf = null; }
+            document.body.classList.remove('trivia-bar-on');
+        }
+
         function triggerTriviaPopup(currentMs) {
-            if (!showTrivia || availableTrivia.length === 0) return;
+            if (!showFactoids || availableTrivia.length === 0) return;
             const fact = availableTrivia[nextTriviaIndex % availableTrivia.length];
             if (!fact || fact.trim() === "") return;
             const bubble = document.getElementById('popup-video-bubble');
