@@ -3,7 +3,10 @@ const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const https = require('https');
+const http = require('http');
 const fs = require('fs');
+const { Server } = require('socket.io');
+const trivia = require('./trivia-engine');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -933,4 +936,73 @@ app.get('/api/image', async (req, res) => {
     } catch (e) { res.status(500).end(); }
 });
 
-app.listen(PORT, () => console.log(`LyricDeck v2 running on port ${PORT}`));
+// ---------- Trivia (multiplayer game, ported from Oma's Deli signage) ----------
+// Endless loop: OFFLINE -> LOBBY -> QUESTION -> REVEAL -> CORRECT -> INTERMISSION -> ...
+app.get('/api/trivia/state', (req, res) => res.json(trivia.snapshot()));
+app.get('/trivia/play', (req, res) => res.sendFile(path.join(__dirname, 'public', 'trivia', 'play.html')));
+
+let triviaTimer = null;
+function startTriviaLoop() {
+    if (triviaTimer) clearInterval(triviaTimer);
+    triviaTimer = setInterval(async () => {
+        const s = trivia.GameEngine;
+        if (s.state === 'OFFLINE') {
+            trivia.openLobby();
+            io.emit('trivia-state', trivia.snapshot());
+            return;
+        }
+        const now = Date.now();
+        if (s.state === 'LOBBY') {
+            if (now - s.startedAt > trivia.TRIVIA_LOBBY_MS) {
+                await trivia.nextQuestion();
+                io.emit('trivia-state', trivia.snapshot());
+            }
+        } else if (s.state === 'QUESTION') {
+            if (now - s.questionAskedAt > trivia.TRIVIA_QUESTION_MS) {
+                trivia.revealAnswer();
+                io.emit('trivia-state', trivia.snapshot());
+            }
+        } else if (s.state === 'REVEAL') {
+            if (now - s.revealedAt > trivia.TRIVIA_REVEAL_MS) {
+                trivia.showCorrect();
+                io.emit('trivia-state', trivia.snapshot());
+            }
+        } else if (s.state === 'CORRECT') {
+            if (now - s.revealedAt > trivia.TRIVIA_REVEAL_MS + trivia.TRIVIA_CORRECT_MS) {
+                trivia.showIntermission();
+                io.emit('trivia-state', trivia.snapshot());
+            }
+        } else if (s.state === 'INTERMISSION') {
+            if (now - s.revealedAt > trivia.TRIVIA_REVEAL_MS + trivia.TRIVIA_CORRECT_MS + trivia.TRIVIA_INTERMISSION_MS) {
+                await trivia.nextQuestion();
+                io.emit('trivia-state', trivia.snapshot());
+            }
+        }
+    }, 2000);
+}
+
+// ---------- Socket.IO (trivia play page) ----------
+const server = http.createServer(app);
+const io = new Server(server);
+io.on('connection', (socket) => {
+    socket.emit('trivia-state', trivia.snapshot());
+    socket.on('trivia-register', (data) => {
+        trivia.registerPlayer(socket.id, data && data.name, data && data.discordId);
+        io.emit('trivia-state', trivia.snapshot());
+    });
+    socket.on('trivia-answer', (data) => {
+        const r = trivia.answerQuestion(socket.id, data && data.answer);
+        if (r.ok) io.emit('trivia-state', trivia.snapshot());
+    });
+    socket.on('trivia-categories', (data) => {
+        trivia.setPlayerCategories(socket.id, (data && data.categories) || []);
+        io.emit('trivia-state', trivia.snapshot());
+    });
+    socket.on('disconnect', () => {
+        trivia.removePlayer(socket.id);
+        io.emit('trivia-state', trivia.snapshot());
+    });
+});
+startTriviaLoop();
+
+server.listen(PORT, () => console.log(`LyricDeck v2 running on port ${PORT}`));

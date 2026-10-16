@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>LyricDeck Trivia — Play</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#000;color:#f5f5f5;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+#app{width:100%;max-width:420px;text-align:center}
+h1{color:#1DB954;margin-bottom:8px;font-size:1.6em}
+.sub{color:#888;margin-bottom:24px}
+input[type=text]{width:100%;padding:16px;font-size:1.2em;border:2px solid #2a2a2a;border-radius:12px;background:#141414;color:#fff;margin-bottom:12px;text-align:center}
+button{width:100%;padding:16px;font-size:1.2em;border:none;border-radius:12px;background:#1DB954;color:#000;font-weight:700;cursor:pointer;margin-bottom:8px}
+button:active{transform:scale(.97)}
+#locked{background:rgba(29,185,84,.08);border:3px solid #1DB954;border-radius:16px;padding:40px 20px;margin-top:8px}
+#locked .big{font-size:3em;margin-bottom:8px}
+#locked p{color:#1DB954;font-size:1.3em;font-weight:700}
+#status{margin-top:16px;color:#888;font-size:.95em}
+#name-display,#name-display-q{color:#1DB954;font-size:1.1em;margin-bottom:12px;font-weight:600}
+.hidden{display:none!important}
+.err{color:#f66;margin-top:8px}
+#q-category{color:#1DB954;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+#q-text{font-size:1.15rem;font-weight:600;color:#fff;line-height:1.4;margin-bottom:14px;padding:0 8px}
+#gamepad{display:flex;flex-direction:column;gap:6px;padding:0 12px}
+.abtn{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;display:flex;align-items:center;gap:6px;background:#141414;border:1px solid #2a2a2a;border-radius:6px;padding:8px 12px;font-size:1.1rem;color:#fff;cursor:pointer;text-align:left;min-height:64px;max-height:80px}
+.abtn .alet{background:#1DB954;color:#000;font-weight:800;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;font-size:1.5rem}
+.abtn .atxt{flex:1}
+.abtn.picked{border-color:#1DB954;background:rgba(29,185,84,.12)}
+#fanfare-remote{display:none;text-align:center;margin-top:16px}
+#fanfare-remote .big{font-size:3rem}
+#fanfare-remote p{font-size:1.2rem;font-weight:800;color:#1DB954}
+#cat-panel{text-align:center;max-height:50vh;overflow-y:auto}
+.cat-chip{display:inline-block;padding:8px 12px;margin:4px;border-radius:20px;background:#1c1c1c;color:#ccc;font-size:0.9em;cursor:pointer;border:2px solid transparent;user-select:none}
+.cat-chip.on{background:#1DB954;color:#000;border-color:#1DB954;font-weight:700}
+.cat-chip:active{transform:scale(.95)}
+#cat-all-btn{background:#2a2a2a;color:#fff;font-size:0.9em;padding:8px;margin-top:8px}
+#cat-fab{position:fixed;top:12px;right:12px;width:48px;height:48px;border-radius:50%;background:#1DB954;color:#000;font-size:1.4em;display:flex;align-items:center;justify-content:center;z-index:100;padding:0;margin:0;box-shadow:0 2px 10px rgba(0,0,0,0.5)}
+#cat-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+#cat-overlay.open{display:flex}
+#cat-sheet{background:#111;border:1px solid #2a2a2a;border-radius:16px;padding:20px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;text-align:center}
+#cat-sheet h2{color:#1DB954;margin-bottom:12px}
+#cat-close{margin-top:12px;background:#1DB954}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>🎙️ LyricDeck Trivia</h1>
+
+  <div id="screen-join">
+    <p class="sub">Enter your name to play</p>
+    <input type="text" id="name-input" placeholder="Your name" maxlength="30" autocomplete="off">
+    <button id="join-btn">Join Game</button>
+    <p class="err hidden" id="join-err"></p>
+  </div>
+
+  <div id="screen-wait" class="hidden">
+    <div id="name-display"></div>
+    <p class="sub">Waiting for the next question…<br>Keep this page open!</p>
+    <div id="status"></div>
+  </div>
+
+  <div id="screen-question" class="hidden">
+    <div id="name-display-q"></div>
+    <div id="q-category"></div>
+    <div id="q-text"></div>
+    <p class="sub" id="q-prompt">Pick your answer!</p>
+    <div id="gamepad">
+      <div class="abtn" data-a="0"><span class="alet">A</span><span class="atxt" id="a0"></span></div>
+      <div class="abtn" data-a="1"><span class="alet">B</span><span class="atxt" id="a1"></span></div>
+      <div class="abtn" data-a="2"><span class="alet">C</span><span class="atxt" id="a2"></span></div>
+      <div class="abtn" data-a="3"><span class="alet">D</span><span class="atxt" id="a3"></span></div>
+    </div>
+  </div>
+
+  <div id="screen-locked" class="hidden">
+    <div id="locked"><div class="big">🔒</div><p>Locked In!</p></div>
+    <div id="fanfare-remote">
+      <div class="big">🎉</div>
+      <p>You got it right!</p>
+    </div>
+    <p class="sub" style="margin-top:12px">Waiting for the next question…</p>
+  </div>
+</div>
+<button id="cat-fab" title="Categories">🏷️</button>
+<div id="cat-overlay">
+  <div id="cat-sheet">
+    <h2>Categories</h2>
+    <div id="cat-panel"></div>
+    <button id="cat-close">Done</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let myName = null;
+let registered = false;
+
+function show(id){
+  ['screen-join','screen-wait','screen-question','screen-locked'].forEach(s =>
+    document.getElementById(s).classList.toggle('hidden', s !== id));
+}
+
+function doRegister(){
+  const name = (document.getElementById('name-input').value.trim() || localStorage.getItem('trivia_name') || 'Player').slice(0, 30);
+  localStorage.setItem('trivia_name', name);
+  socket.emit('trivia-register', { name });
+  myName = name;
+  registered = true;
+  document.getElementById('name-display').textContent = 'Playing as: ' + myName;
+  document.getElementById('name-display-q').textContent = 'Playing as: ' + myName;
+  show('screen-wait');
+}
+
+document.getElementById('join-btn').onclick = doRegister;
+/* Restore saved name */
+(function(){
+  const saved = localStorage.getItem('trivia_name');
+  if (saved) {
+    document.getElementById('name-input').value = saved;
+    doRegister();
+  }
+})();
+document.getElementById('name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doRegister();
+});
+
+let myQid=null, iAnswered=false, myAnswerIdx=null;
+document.querySelectorAll('.abtn').forEach(b => {
+  let fired=false;
+  const fire=() => {
+    if(fired)return;fired=true;
+    const idx = parseInt(b.dataset.a, 10);
+    iAnswered=true;myAnswerIdx=idx;
+    socket.emit('trivia-answer', { answer: idx });
+    show('screen-locked');
+    setTimeout(()=>fired=false,1000);
+  };
+  b.addEventListener('pointerup', fire);
+  b.addEventListener('click', fire);
+});
+
+socket.on('trivia-state', (s) => {
+  if (!registered) return;
+  if (s.state === 'QUESTION') {
+    const qid=s.question?(s.question.q+(s.question.answers||[]).join('|')):null;
+    if (qid!==myQid){myQid=qid;iAnswered=false;myAnswerIdx=null;}
+    if (s.question) {
+      document.getElementById('q-category').textContent = s.question.category || '';
+      document.getElementById('q-text').textContent = s.question.q || '';
+      (s.question.answers || []).forEach((a, i) => {
+        const el = document.getElementById('a' + i);
+        if (el) el.textContent = a;
+      });
+    }
+    document.querySelectorAll('.abtn').forEach(b => b.classList.remove('picked'));
+    show(iAnswered?'screen-locked':'screen-question');
+  } else if (s.state === 'LOBBY' || s.state === 'OFFLINE' || s.state === 'INTERMISSION' || s.state === 'CORRECT') {
+    document.getElementById('fanfare-remote').style.display = 'none';
+    show('screen-wait');
+  } else if (s.state === 'REVEAL') {
+    const correctIdx = s.question && s.question.correct;
+    const wasCorrect = iAnswered && myAnswerIdx === correctIdx;
+    document.getElementById('fanfare-remote').style.display = wasCorrect ? 'block' : 'none';
+    show('screen-locked');
+  }
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('status').textContent = 'Connection lost — reconnecting…';
+});
+socket.on('connect', () => {
+  document.getElementById('status').textContent = '';
+  if (registered && myName) socket.emit('trivia-register', { name: myName });
+});
+
+/* Category selector */
+let allCats = [];
+let myCats = JSON.parse(localStorage.getItem('trivia_cats') || 'null'); // null = all
+
+function renderCats() {
+  const panel = document.getElementById('cat-panel');
+  if (!panel || !allCats.length) return;
+  const sel = myCats || allCats.map(x => x.id);
+  panel.innerHTML = allCats.map(x =>
+    `<span class="cat-chip${sel.includes(x.id) ? ' on' : ''}" data-id="${x.id}">${x.name}</span>`
+  ).join('') + `<br><button id="cat-all-btn">Select All</button>`;
+  panel.querySelectorAll('.cat-chip').forEach(ch => {
+    ch.onclick = () => {
+      const id = parseInt(ch.dataset.id, 10);
+      let s = myCats || allCats.map(x => x.id);
+      s = s.includes(id) ? s.filter(y => y !== id) : [...s, id];
+      myCats = s.length ? s : allCats.map(x => x.id);
+      localStorage.setItem('trivia_cats', JSON.stringify(myCats));
+      socket.emit('trivia-categories', { categories: myCats });
+      renderCats();
+    };
+  });
+  const allBtn = document.getElementById('cat-all-btn');
+  if (allBtn) allBtn.onclick = () => {
+    myCats = allCats.map(x => x.id);
+    localStorage.setItem('trivia_cats', JSON.stringify(myCats));
+    socket.emit('trivia-categories', { categories: myCats });
+    renderCats();
+  };
+}
+
+document.getElementById('cat-fab').onclick = () => {
+  document.getElementById('cat-overlay').classList.add('open');
+};
+document.getElementById('cat-close').onclick = () => {
+  document.getElementById('cat-overlay').classList.remove('open');
+};
+document.getElementById('cat-overlay').onclick = (e) => {
+  if (e.target.id === 'cat-overlay') e.target.classList.remove('open');
+};
+
+socket.on('trivia-state', (s) => {
+  if (s.categories && s.categories.length && !allCats.length) {
+    allCats = s.categories;
+    renderCats();
+    if (myCats) socket.emit('trivia-categories', { categories: myCats });
+  }
+});
+</script>
+</body>
+</html>
