@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDeck Config</title>
+<style>
+  :root { --green: #1DB954; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0a0a; color: #eee; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 24px 16px 60px; }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  h1 span { color: var(--green); }
+  .sub { color: #888; font-size: .9rem; margin-bottom: 28px; }
+  .card { background: #141414; border: 1px solid #2a2a2a; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+  .card h2 { font-size: 1.05rem; margin: 0 0 4px; }
+  .card p.desc { color: #888; font-size: .85rem; margin: 0 0 16px; }
+  .radios { display: flex; gap: 10px; margin-bottom: 16px; }
+  .radios label { flex: 1; text-align: center; padding: 12px 8px; border: 2px solid #2a2a2a; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: .95rem; transition: .15s; }
+  .radios input { display: none; }
+  .radios label.on { border-color: var(--green); background: rgba(29,185,84,.12); color: #fff; }
+  textarea, input[type=text] { width: 100%; background: #0a0a0a; border: 1px solid #333; border-radius: 10px; color: #eee; padding: 12px; font-size: .95rem; font-family: inherit; }
+  textarea { min-height: 90px; resize: vertical; }
+  .row { display: flex; gap: 10px; margin-top: 10px; }
+  .btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: .95rem; font-weight: 700; cursor: pointer; }
+  .btn-up { background: #222; color: #eee; border: 1px solid #333; }
+  .btn-save { background: var(--green); color: #000; }
+  .btn-save:disabled { opacity: .5; }
+  #preview { margin-top: 16px; min-height: 80px; border: 1px dashed #333; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 16px; color: #666; font-size: .85rem; text-align: center; overflow: hidden; }
+  #preview img { max-width: 100%; max-height: 220px; border-radius: 8px; }
+  #preview .pv-text { font-size: 1.2rem; font-weight: 600; color: #fff; }
+  #status { margin-top: 12px; font-size: .9rem; min-height: 1.4em; text-align: center; }
+  #status.ok { color: var(--green); }
+  #status.err { color: #ff6b6b; }
+  .hidden { display: none !important; }
+  .back { display: inline-block; margin-top: 8px; color: #888; text-decoration: none; font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LyricDeck <span>Config</span></h1>
+  <p class="sub">What shows on the TV bar &amp; phones between trivia questions.</p>
+
+  <div class="card">
+    <h2>Trivia intermission</h2>
+    <p class="desc">Shown during the break between questions. "None" keeps the join screen.</p>
+    <div class="radios" id="type-radios">
+      <label data-t="none"><input type="radio" name="imtype" value="none">None</label>
+      <label data-t="text"><input type="radio" name="imtype" value="text">Text</label>
+      <label data-t="image"><input type="radio" name="imtype" value="image">Image</label>
+    </div>
+    <div id="text-wrap" class="hidden">
+      <textarea id="im-text" maxlength="500" placeholder="e.g. Happy Hour 4–6pm — $2 off all drafts!"></textarea>
+    </div>
+    <div id="image-wrap" class="hidden">
+      <input type="text" id="im-url" placeholder="Image URL (https://…)">
+      <div class="row">
+        <button class="btn btn-up" id="upload-btn" type="button">Upload image instead</button>
+        <input type="file" id="im-file" accept="image/*" class="hidden">
+      </div>
+    </div>
+    <div id="preview">Preview appears here</div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn btn-save" id="save-btn">Save</button>
+    </div>
+    <div id="status"></div>
+  </div>
+  <div class="card">
+    <h2>Trivia question source</h2>
+    <p class="desc">Where bar-trivia questions come from. Pick a custom endpoint to run trivia on your own content — e.g. <a href="https://github.com/mortis2600/LoreForge" target="_blank" style="color:#1DB954">LoreForge</a> for Dungeon Crawler Carl trivia.</p>
+    <div class="radios" id="qs-radios">
+      <label data-t="opentdb"><input type="radio" name="qstype" value="opentdb">OpenTDB</label>
+      <label data-t="custom"><input type="radio" name="qstype" value="custom">Custom endpoint</label>
+    </div>
+    <div id="qs-url-wrap" class="hidden">
+      <input type="text" id="qs-url" placeholder="https://your-server.com/api/v1/trivia">
+      <p class="desc" style="margin:10px 0 0">Your endpoint must answer:<br>
+      <code>GET {base}/categories</code> → <code>{"categories":[{"id":"spells","name":"Spells"}]}</code><br>
+      <code>GET {base}/questions?count=1&amp;categories=spells</code> → <code>{"questions":[{"question":"…","correct":"…","incorrect":["…","…","…"],"category":"Spells"}]}</code></p>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn btn-save" id="qs-save-btn">Save question source</button>
+    </div>
+    <div id="qs-status"></div>
+  </div>
+  <a class="back" href="/">← Back to LyricDeck</a>
+</div>
+<script>
+let curType = 'none';
+const $ = id => document.getElementById(id);
+
+function setType(t) {
+  curType = t;
+  document.querySelectorAll('#type-radios label').forEach(l => l.classList.toggle('on', l.dataset.t === t));
+  $('text-wrap').classList.toggle('hidden', t !== 'text');
+  $('image-wrap').classList.toggle('hidden', t !== 'image');
+  updatePreview();
+}
+document.querySelectorAll('#type-radios label').forEach(l => l.addEventListener('click', () => setType(l.dataset.t)));
+$('im-text').addEventListener('input', updatePreview);
+$('im-url').addEventListener('input', updatePreview);
+$('upload-btn').addEventListener('click', () => $('im-file').click());
+$('im-file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 2 * 1024 * 1024) { status('Image must be under 2MB.', 'err'); return; }
+  const r = new FileReader();
+  r.onload = () => { $('im-url').value = r.result; updatePreview(); status('Image ready — hit Save.', 'ok'); };
+  r.readAsDataURL(f);
+});
+function updatePreview() {
+  const p = $('preview');
+  if (curType === 'text' && $('im-text').value.trim()) {
+    p.innerHTML = ''; const d = document.createElement('div');
+    d.className = 'pv-text'; d.textContent = $('im-text').value.trim(); p.appendChild(d);
+  } else if (curType === 'image' && $('im-url').value.trim()) {
+    p.innerHTML = ''; const img = document.createElement('img');
+    img.src = $('im-url').value.trim(); p.appendChild(img);
+  } else {
+    p.textContent = curType === 'none' ? 'Join screen will show (default)' : 'Preview appears here';
+  }
+}
+function status(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
+
+$('save-btn').addEventListener('click', async () => {
+  const btn = $('save-btn'); btn.disabled = true; status('Saving…');
+  try {
+    const r = await fetch('/api/trivia/intermission', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: curType, text: $('im-text').value, imageUrl: $('im-url').value })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    status('Saved.', 'ok');
+  } catch (e) { status('Save failed: ' + e.message, 'err'); }
+  btn.disabled = false;
+});
+
+// Question source
+let qsType = 'opentdb';
+function qsSetType(t) {
+  qsType = t;
+  document.querySelectorAll('#qs-radios label').forEach(l => l.classList.toggle('on', l.dataset.t === t));
+  $('qs-url-wrap').classList.toggle('hidden', t !== 'custom');
+}
+document.querySelectorAll('#qs-radios label').forEach(l => l.addEventListener('click', () => qsSetType(l.dataset.t)));
+function qsStatus(msg, cls) { const e = $('qs-status'); e.textContent = msg; e.className = cls || ''; e.style.cssText = 'margin-top:12px;font-size:.9rem;min-height:1.4em;text-align:center;color:' + (cls === 'ok' ? '#1DB954' : cls === 'err' ? '#ff6b6b' : '#888'); }
+$('qs-save-btn').addEventListener('click', async () => {
+  const btn = $('qs-save-btn'); btn.disabled = true; qsStatus('Saving…');
+  try {
+    const r = await fetch('/api/trivia/question-source', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: qsType, endpointUrl: $('qs-url').value })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    qsStatus('Saved. New questions use it from the next round.', 'ok');
+  } catch (e) { qsStatus('Save failed: ' + e.message, 'err'); }
+  btn.disabled = false;
+});
+fetch('/api/trivia/question-source').then(r => r.json()).then(c => {
+  if (c.endpointUrl) $('qs-url').value = c.endpointUrl;
+  qsSetType(c.type || 'opentdb');
+}).catch(() => qsSetType('opentdb'));
+
+// Load current config
+fetch('/api/trivia/intermission').then(r => r.json()).then(c => {
+  if (c.text) $('im-text').value = c.text;
+  if (c.imageUrl) $('im-url').value = c.imageUrl;
+  setType(c.type || 'none');
+}).catch(() => setType('none'));
+</script>
+</body>
+</html>

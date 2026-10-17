@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const http = require('http');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const HISTORY_PATH = path.join(DATA_DIR, 'trivia_history.json');
@@ -104,8 +105,78 @@ const CATEGORIES = [
     [27,"Animals"],[28,"Comics"],[29,"Gadgets"],[31,"Anime & Manga"],
     [32,"Cartoons"],
 ];
+// ---- Custom question endpoint ----
+// Lets a venue run trivia on their own questions (e.g. LoreForge).
+// Contract:
+//   GET {base}/categories -> { "categories": [{ "id": "spells", "name": "Spells" }] }
+//   GET {base}/questions?count=N&categories=id1,id2
+//     -> { "questions": [{ "question": "...", "correct": "...",
+//                          "incorrect": ["...","...","..."], "category": "..." }] }
+let questionSource = { type: 'opentdb', endpointUrl: '' };
+let customCategories = null;
+let customCategoriesAt = 0;
+function setQuestionSource(cfg) {
+    cfg = cfg || {};
+    questionSource = {
+        type: cfg.type === 'custom' ? 'custom' : 'opentdb',
+        endpointUrl: String(cfg.endpointUrl || '').replace(/\/$/, ''),
+    };
+    customCategories = null;
+    if (questionSource.type === 'custom' && questionSource.endpointUrl) {
+        fetchCustomCategories().catch(() => {});
+    }
+}
+function httpGetJson(url, timeoutMs) {
+    return new Promise((resolve, reject) => {
+        const lib = url.startsWith('https:') ? https : http;
+        const req = lib.get(url, (res) => {
+            let data = '';
+            res.on('data', c => data += c);
+            res.on('end', () => {
+                try { resolve(JSON.parse(data)); }
+                catch (e) { reject(new Error('bad json')); }
+            });
+        });
+        req.on('error', reject);
+        req.setTimeout(timeoutMs || 5000, () => { req.destroy(); reject(new Error('timeout')); });
+    });
+}
+async function fetchCustomCategories() {
+    if (customCategories && Date.now() - customCategoriesAt < 3600000) return customCategories;
+    const data = await httpGetJson(questionSource.endpointUrl + '/categories');
+    const list = (data.categories || [])
+        .map(c => ({ id: String(c.id), name: String(c.name) }))
+        .filter(c => c.id && c.name);
+    if (list.length) { customCategories = list; customCategoriesAt = Date.now(); }
+    return customCategories || [];
+}
+// Sync category list for the snapshot (custom list once cached, else OpenTDB)
+function getCategoryList() {
+    if (questionSource.type === 'custom') {
+        if (customCategories) return customCategories;
+        fetchCustomCategories().catch(() => {});
+    }
+    return CATEGORIES.map(c => ({ id: c[0], name: c[1] }));
+}
+async function fetchCustomQuestion() {
+    const ids = getActiveCategories().map(String);
+    let url = questionSource.endpointUrl + '/questions?count=1';
+    if (ids.length) url += '&categories=' + ids.map(encodeURIComponent).join(',');
+    const data = await httpGetJson(url);
+    const q = (data.questions || [])[0];
+    if (!q || !q.question || !q.correct || !Array.isArray(q.incorrect) || q.incorrect.length < 3) return null;
+    const answers = [String(q.correct), ...q.incorrect.slice(0, 3).map(String)]
+        .sort(() => Math.random() - 0.5);
+    return {
+        q: String(q.question),
+        answers,
+        correct: answers.indexOf(String(q.correct)),
+        category: String(q.category || ''),
+        difficulty: 'medium',
+    };
+}
 function getActiveCategories() {
-    const all = CATEGORIES.map(c => c[0]);
+    const all = getCategoryList().map(c => c.id);
     const sels = Object.values(GameEngine.playerCategories || {}).filter(a => a && a.length);
     if (!sels.length) return all;
     const union = new Set();
@@ -113,13 +184,19 @@ function getActiveCategories() {
     return union.size ? [...union] : all;
 }
 function setPlayerCategories(socketId, cats) {
-    const valid = new Set(CATEGORIES.map(c => c[0]));
-    GameEngine.playerCategories[socketId] = (cats || []).filter(id => valid.has(id));
+    const valid = new Set(getCategoryList().map(c => String(c.id)));
+    GameEngine.playerCategories[socketId] = (cats || []).filter(id => valid.has(String(id)));
 }
 
-// Fetch a question from OpenTDB, fallback to local
+// Fetch a question: custom endpoint first (if configured), then OpenTDB, then local
 function fetchQuestion() {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
+        if (questionSource.type === 'custom' && questionSource.endpointUrl) {
+            try {
+                const q = await fetchCustomQuestion();
+                if (q) return resolve(q);
+            } catch (e) { /* fall through to OpenTDB */ }
+        }
         const _cats = getActiveCategories();
         const _cat = _cats[Math.floor(Math.random() * _cats.length)];
         const req = https.get('https://opentdb.com/api.php?amount=1&type=multiple&category=' + _cat, (res) => {
@@ -220,11 +297,13 @@ function snapshot() {
             category: GameEngine.currentQuestion.category,
             // correct answer only revealed in REVEAL/CORRECT
             correct: ['REVEAL', 'CORRECT'].includes(GameEngine.state) ? GameEngine.currentQuestion.correct : null,
+            // deadline for the play-page timer (ms epoch)
+            endsAt: GameEngine.questionAskedAt ? GameEngine.questionAskedAt + TRIVIA_QUESTION_MS : null,
         } : null,
         correctPlayers: GameEngine.correctPlayers,
         players: playerList(),
         answerCounts: countAnswers(),
-        categories: CATEGORIES.map(c => ({ id: c[0], name: c[1] })),
+        categories: getCategoryList(),
         activeCategories: getActiveCategories(),
     };
 }
@@ -248,6 +327,7 @@ module.exports = {
     GameEngine,
     resetGame, openLobby, registerPlayer, removePlayer, answerQuestion, setPlayerCategories, getActiveCategories,
     nextQuestion, revealAnswer, showCorrect, showIntermission,
+    setQuestionSource,
     snapshot, playerList,
     TRIVIA_LOBBY_MS, TRIVIA_QUESTION_MS, TRIVIA_REVEAL_MS, TRIVIA_CORRECT_MS, TRIVIA_INTERMISSION_MS,
 };

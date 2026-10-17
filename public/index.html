@@ -46,12 +46,15 @@
         body.trivia-bar-on #trivia-bar { transform: translateY(0); }
         body.trivia-bar-on #lyrics-container { padding-bottom: calc(max(26vh, 170px) + 24px); }
         #bar-qr { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
-        #bar-qr img, #bar-qr canvas, #bar-qr table { border-radius: 8px; background: #fff; padding: 5px; }
+        #bar-qr img, #bar-qr canvas, #bar-qr table { border-radius: 8px; background: #fff; padding: 20px; }
         #bar-qr span { font-size: 0.62rem; letter-spacing: 2px; color: var(--accent-color); font-weight: 800; }
         #bar-main { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; overflow: hidden; }
         #t-lobby h2 { color: #fff; margin: 0 0 6px 0; font-size: 1.4rem; }
         #t-lobby .lobby-sub { color: #aaa; font-size: 1rem; font-weight: 400; }
         #t-lobby .join-url { color: var(--accent-color); font-size: 0.9rem; }
+        #t-intermission { display:flex; align-items:center; justify-content:center; width:100%; height:100%; padding:10px 16px; overflow:hidden; }
+        #t-intermission .im-text { font-size:1.35em; font-weight:700; color:#fff; text-align:center; line-height:1.35; }
+        #t-intermission img { max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; }
         #t-qcat { color: var(--accent-color); font-size: 0.8rem; font-weight: 800; letter-spacing: 2px; margin-bottom: 4px; }
         #t-qtext { color: #fff; font-size: 1.2rem; font-weight: 700; margin-bottom: 10px; line-height: 1.3; }
         #t-answers, #t-answers-r { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -212,7 +215,7 @@
             max-width: 700px; width: 90%; margin: 0 auto; height: 0px; overflow: hidden;
             background: rgba(15, 15, 15, 0.85); border: 0 solid transparent; border-radius: 12px;
             transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease, margin 0.4s ease, border-width 0.4s ease;
-            backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; flex-shrink: 0; z-index: 10;
+            backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative; z-index: 65;
         }
 
         #get-ready-banner.active { height: 65px; margin: 10px auto 0 auto; border-width: 2px; border-color: var(--accent-color); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 15px var(--accent-color); }
@@ -256,7 +259,7 @@
         #wiki-links-widget a:last-child { margin-bottom: 0; }
         #wiki-links-widget.sleeping { opacity: 0 !important; pointer-events: none !important; }
 
-        #popup-video-bubble { position: absolute; width: 330px; background: #ffffff; color: #111111; border: 4px solid var(--accent-color); border-radius: 18px; padding: 16px 20px; font-size: 1rem; font-weight: 600; box-shadow: 0px 12px 30px rgba(0,0,0,0.7); opacity: 0; transform: scale(0.6) translateY(20px); transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 40; pointer-events: none; text-align: left; line-height: 1.45; }
+        #popup-video-bubble { position: absolute; width: 330px; background: #ffffff; color: #111111; border: 4px solid var(--accent-color); border-radius: 18px; padding: 16px 20px; font-size: 1rem; font-weight: 600; box-shadow: 0px 12px 30px rgba(0,0,0,0.7); opacity: 0; transform: scale(0.6) translateY(20px); transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 70; pointer-events: none; text-align: left; line-height: 1.45; }
         #popup-video-bubble.show { opacity: 1; transform: scale(1) translateY(0); }
         #popup-video-bubble.right-side::after { content: ''; position: absolute; bottom: -16px; left: 35px; border-width: 16px 16px 0; border-style: solid; border-color: #ffffff transparent transparent transparent; display: block; width: 0; }
         #popup-video-bubble.right-side::before { content: ''; position: absolute; bottom: -22px; left: 32px; border-width: 20px 20px 0; border-style: solid; border-color: var(--accent-color) transparent transparent transparent; display: block; width: 0; z-index: -1; }
@@ -392,6 +395,7 @@
             <span>SCAN TO PLAY</span>
         </div>
         <div id="bar-main">
+            <div id="t-intermission" class="hidden"></div>
             <div id="t-lobby">
                 <h2>&#x1F399;&#xFE0F; Bar Trivia <span class="lobby-sub">&mdash; scan the QR code to play!</span></h2>
                 <div class="join-url" id="join-url"></div>
@@ -2490,10 +2494,40 @@
         // ---------- Trivia Bar: multiplayer game, ported from Oma's Deli (no signage) ----------
         const TB_LETTERS = ['A','B','C','D'];
         function tbEsc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-        function tbShow(id){['t-lobby','t-question','t-reveal'].forEach(s=>{const el=document.getElementById(s);if(el)el.classList.toggle('hidden',s!==id);});}
-        function tbDrawQR(){
+        function tbShow(id){['t-lobby','t-question','t-reveal','t-intermission'].forEach(s=>{const el=document.getElementById(s);if(el)el.classList.toggle('hidden',s!==id);});}
+        // Intermission content (set at /config): text or image shown between questions
+        let tbIntermissionCfg = null;
+        async function tbGetIntermission(){
+            if (!tbIntermissionCfg) {
+                try { const r = await fetch('/api/trivia/intermission'); if (r.ok) tbIntermissionCfg = await r.json(); } catch(e) {}
+            }
+            return tbIntermissionCfg || { type: 'none' };
+        }
+        function tbRenderIntermission(cfg){
+            const el = document.getElementById('t-intermission');
+            el.innerHTML = '';
+            if (cfg.type === 'text' && cfg.text) {
+                const d = document.createElement('div'); d.className = 'im-text'; d.textContent = cfg.text; el.appendChild(d);
+            } else if (cfg.type === 'image' && cfg.imageUrl) {
+                const img = document.createElement('img'); img.src = cfg.imageUrl; img.alt = ''; el.appendChild(img);
+            } else return false;
+            return true;
+        }
+        // QR join URL comes from the server's PUBLIC_URL (.env); falls back to
+        // this page's origin so open-source deploys work on the LAN with no config.
+        let tbJoinUrl = null, tbJoinUrlFetched = false;
+        async function tbGetJoinUrl(){
+            if (tbJoinUrlFetched) return tbJoinUrl;
+            tbJoinUrlFetched = true;
+            try {
+                const r = await fetch('/api/trivia/join-url');
+                if (r.ok) { const j = await r.json(); if (j.url) tbJoinUrl = j.url; }
+            } catch(e) {}
+            return tbJoinUrl;
+        }
+        async function tbDrawQR(){
             try{
-                const url=location.origin+'/trivia/play';
+                const url=(await tbGetJoinUrl())||(location.origin+'/trivia/play');
                 const ju=document.getElementById('join-url');if(ju)ju.textContent=url;
                 const el=document.getElementById('qr');if(!el||el.dataset.done)return;
                 el.innerHTML='';
@@ -2535,7 +2569,13 @@
                 if(window._tbLastTKey===tkey)return;
                 window._tbLastTKey=tkey;
                 tbRenderPlayers(s);
-                if(s.state==='LOBBY'||s.state==='OFFLINE'||s.state==='INTERMISSION'){tbShow('t-lobby');tbDrawQR();clearInterval(tbCdTimer);}
+                if(s.state==='LOBBY'||s.state==='OFFLINE'){tbShow('t-lobby');tbDrawQR();clearInterval(tbCdTimer);}
+                else if(s.state==='INTERMISSION'){
+                    clearInterval(tbCdTimer);
+                    const cfg = await tbGetIntermission();
+                    if (tbRenderIntermission(cfg)) tbShow('t-intermission');
+                    else { tbShow('t-lobby'); tbDrawQR(); }
+                }
                 else if(s.state==='QUESTION'){
                     tbShow('t-question');const q=s.question;if(!q)return;
                     const qid=q.q+(q.answers||[]).join('|');

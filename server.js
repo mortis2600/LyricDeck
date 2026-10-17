@@ -11,7 +11,7 @@ const trivia = require('./trivia-engine');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '3mb' })); // 3mb for base64 intermission images
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------- Disk persistence (user corrections survive restarts) ----------
@@ -19,7 +19,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const PERSIST_PATH = path.join(DATA_DIR, 'persist.json');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-let persisted = { manualOverrides: {}, syncOffsets: {}, partyQueue: [] };
+let persisted = { manualOverrides: {}, syncOffsets: {}, partyQueue: [], triviaIntermission: { type: 'none', text: '', imageUrl: '' }, triviaQuestionSource: { type: 'opentdb', endpointUrl: '' } };
 try {
     const raw = fs.readFileSync(PERSIST_PATH, 'utf8');
     persisted = Object.assign(persisted, JSON.parse(raw));
@@ -939,7 +939,57 @@ app.get('/api/image', async (req, res) => {
 // ---------- Trivia (multiplayer game, ported from Oma's Deli signage) ----------
 // Endless loop: OFFLINE -> LOBBY -> QUESTION -> REVEAL -> CORRECT -> INTERMISSION -> ...
 app.get('/api/trivia/state', (req, res) => res.json(trivia.snapshot()));
+// Public join URL for the trivia QR code. Set PUBLIC_URL in .env on deployments
+// that need phones to reach the server from outside the LAN (e.g. a Tailscale
+// funnel URL). When unset, clients fall back to their own origin.
+app.get('/api/trivia/join-url', (req, res) => {
+    const base = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
+    res.json({ url: base ? base + '/trivia/play' : null });
+});
 app.get('/trivia/play', (req, res) => res.sendFile(path.join(__dirname, 'public', 'trivia', 'play.html')));
+// ---- Trivia intermission content (shown between questions) ----
+// Configured at /config. { type: 'none'|'text'|'image', text, imageUrl }
+function getIntermission() {
+    const c = persisted.triviaIntermission || {};
+    return {
+        type: ['text', 'image'].includes(c.type) ? c.type : 'none',
+        text: String(c.text || '').slice(0, 500),
+        imageUrl: String(c.imageUrl || '').slice(0, 2000000),
+    };
+}
+app.get('/api/trivia/intermission', (req, res) => res.json(getIntermission()));
+app.post('/api/trivia/intermission', (req, res) => {
+    const b = req.body || {};
+    const type = ['text', 'image'].includes(b.type) ? b.type : 'none';
+    persisted.triviaIntermission = {
+        type,
+        text: type === 'text' ? String(b.text || '').slice(0, 500) : '',
+        imageUrl: type === 'image' ? String(b.imageUrl || '').slice(0, 2000000) : '',
+    };
+    savePersist();
+    res.json({ ok: true, config: getIntermission() });
+});
+app.get('/config', (req, res) => res.sendFile(path.join(__dirname, 'public', 'config.html')));
+// ---- Trivia question source (OpenTDB or a custom endpoint, e.g. LoreForge) ----
+function getQuestionSource() {
+    const c = persisted.triviaQuestionSource || {};
+    return {
+        type: c.type === 'custom' ? 'custom' : 'opentdb',
+        endpointUrl: String(c.endpointUrl || '').replace(/\/$/, '').slice(0, 500),
+    };
+}
+app.get('/api/trivia/question-source', (req, res) => res.json(getQuestionSource()));
+app.post('/api/trivia/question-source', (req, res) => {
+    const b = req.body || {};
+    persisted.triviaQuestionSource = {
+        type: b.type === 'custom' ? 'custom' : 'opentdb',
+        endpointUrl: b.type === 'custom' ? String(b.endpointUrl || '').replace(/\/$/, '').slice(0, 500) : '',
+    };
+    savePersist();
+    trivia.setQuestionSource(getQuestionSource());
+    res.json({ ok: true, config: getQuestionSource() });
+});
+trivia.setQuestionSource(getQuestionSource());
 
 let triviaTimer = null;
 function startTriviaLoop() {

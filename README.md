@@ -32,6 +32,23 @@ It started as a Plex-first project and grew into a three-source jukebox with the
 - **Synced lyrics** from LRCLib with manual search and per-song overrides when the wrong lyrics load.
 - **Romaji toggle** for Japanese lyrics (kuroshiro) and Korean romanization (Revised Romanization), **pop-up trivia** from Genius annotations, gapless prefetch of upcoming tracks, and persistent lyric corrections that survive restarts.
 - **Help page** (`/help`) so guests can onboard themselves.
+- **Bar trivia** (`/trivia/play`): an endless multiplayer trivia bar along the bottom of the screen — guests scan a QR code, answer on their phones, and the TV reveals who got it right. The break between questions can show your own text or image (drink specials, anyone?) via `/config`.
+- **Bring your own trivia questions.** Don't want generic pub trivia? Point LyricDeck at any compatible question endpoint in `/config` and run the game on your own content — your fandom, your workplace, your inside jokes. The phone category picker populates straight from your endpoint. For example, pair it with [LoreForge](https://github.com/mortis2600/LoreForge) to run Dungeon Crawler Carl trivia straight from the books.
+
+### Custom trivia endpoint contract
+
+```text
+GET {base}/categories
+  → { "categories": [{ "id": "spells", "name": "Spells" }] }
+
+GET {base}/questions?count=1&categories=spells
+  → { "questions": [{
+        "question": "Which spell does Carl use to…?",
+        "correct": "Magic Missile",
+        "incorrect": ["Fireball", "Heal", "Shield"],
+        "category": "Spells"
+      }] }
+```
 
 ## Quick start
 

@@ -22,6 +22,12 @@ button:active{transform:scale(.97)}
 .err{color:#f66;margin-top:8px}
 #q-category{color:#1DB954;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
 #q-text{font-size:1.15rem;font-weight:600;color:#fff;line-height:1.4;margin-bottom:14px;padding:0 8px}
+#q-timer{height:6px;background:rgba(255,255,255,.1);border-radius:3px;margin:0 12px 6px;overflow:hidden}
+#q-timer-fill{height:100%;background:#1DB954;width:100%}
+#q-secs{color:#888;font-size:.85em;margin-bottom:10px}
+#im-content{margin:14px 0;min-height:40px}
+#im-content .im-text{font-size:1.15rem;font-weight:600;color:#fff;line-height:1.4}
+#im-content img{max-width:100%;max-height:40vh;border-radius:10px}
 #gamepad{display:flex;flex-direction:column;gap:6px;padding:0 12px}
 .abtn{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;display:flex;align-items:center;gap:6px;background:#141414;border:1px solid #2a2a2a;border-radius:6px;padding:8px 12px;font-size:1.1rem;color:#fff;cursor:pointer;text-align:left;min-height:64px;max-height:80px}
 .abtn .alet{background:#1DB954;color:#000;font-weight:800;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;font-size:1.5rem}
@@ -56,6 +62,7 @@ button:active{transform:scale(.97)}
 
   <div id="screen-wait" class="hidden">
     <div id="name-display"></div>
+    <div id="im-content"></div>
     <p class="sub">Waiting for the next question…<br>Keep this page open!</p>
     <div id="status"></div>
   </div>
@@ -64,6 +71,8 @@ button:active{transform:scale(.97)}
     <div id="name-display-q"></div>
     <div id="q-category"></div>
     <div id="q-text"></div>
+    <div id="q-timer"><div id="q-timer-fill"></div></div>
+    <div id="q-secs"></div>
     <p class="sub" id="q-prompt">Pick your answer!</p>
     <div id="gamepad">
       <div class="abtn" data-a="0"><span class="alet">A</span><span class="atxt" id="a0"></span></div>
@@ -127,6 +136,21 @@ document.getElementById('name-input').addEventListener('keydown', (e) => {
 });
 
 let myQid=null, iAnswered=false, myAnswerIdx=null;
+let qTimerInt=null;
+function startQTimer(endsAt){
+  clearInterval(qTimerInt);
+  const fill=document.getElementById('q-timer-fill');
+  const secs=document.getElementById('q-secs');
+  const total=30000;
+  const tick=()=>{
+    const remain=Math.max(0,(endsAt||0)-Date.now());
+    if(fill)fill.style.width=(remain/total*100)+'%';
+    if(secs)secs.textContent=remain>0?Math.ceil(remain/1000)+'s':'';
+    if(remain<=0)clearInterval(qTimerInt);
+  };
+  tick();
+  qTimerInt=setInterval(tick,250);
+}
 document.querySelectorAll('.abtn').forEach(b => {
   let fired=false;
   const fire=() => {
@@ -145,7 +169,7 @@ socket.on('trivia-state', (s) => {
   if (!registered) return;
   if (s.state === 'QUESTION') {
     const qid=s.question?(s.question.q+(s.question.answers||[]).join('|')):null;
-    if (qid!==myQid){myQid=qid;iAnswered=false;myAnswerIdx=null;}
+    if (qid!==myQid){myQid=qid;iAnswered=false;myAnswerIdx=null;startQTimer(s.question.endsAt);}
     if (s.question) {
       document.getElementById('q-category').textContent = s.question.category || '';
       document.getElementById('q-text').textContent = s.question.q || '';
@@ -156,9 +180,24 @@ socket.on('trivia-state', (s) => {
     }
     document.querySelectorAll('.abtn').forEach(b => b.classList.remove('picked'));
     show(iAnswered?'screen-locked':'screen-question');
-  } else if (s.state === 'LOBBY' || s.state === 'OFFLINE' || s.state === 'INTERMISSION' || s.state === 'CORRECT') {
+  } else if (s.state === 'LOBBY' || s.state === 'OFFLINE' || s.state === 'CORRECT') {
+    clearInterval(qTimerInt);
+    document.getElementById('fanfare-remote').style.display = 'none';
+    document.getElementById('im-content').innerHTML = '';
+    show('screen-wait');
+  } else if (s.state === 'INTERMISSION') {
+    clearInterval(qTimerInt);
     document.getElementById('fanfare-remote').style.display = 'none';
     show('screen-wait');
+    fetch('/api/trivia/intermission').then(r => r.json()).then(cfg => {
+      const el = document.getElementById('im-content');
+      el.innerHTML = '';
+      if (cfg.type === 'text' && cfg.text) {
+        const d = document.createElement('div'); d.className = 'im-text'; d.textContent = cfg.text; el.appendChild(d);
+      } else if (cfg.type === 'image' && cfg.imageUrl) {
+        const img = document.createElement('img'); img.src = cfg.imageUrl; img.alt = ''; el.appendChild(img);
+      }
+    }).catch(() => {});
   } else if (s.state === 'REVEAL') {
     const correctIdx = s.question && s.question.correct;
     const wasCorrect = iAnswered && myAnswerIdx === correctIdx;
