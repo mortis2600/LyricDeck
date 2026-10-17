@@ -214,6 +214,28 @@ async function fetchGeniusFacts(title, artist) {
     }
 }
 
+// Quality score for synced lyrics (0 = unusable, 1 = great). Rejects truncated
+// or malformed syncs so the picker prefers a complete lyric file over a
+// duration-matched dud.
+function scoreSyncedLyrics(syncedLyrics, durationSec) {
+    if (!syncedLyrics || !durationSec) return 0;
+    const lines = syncedLyrics.split('\n').filter(l => l.trim());
+    if (lines.length < 5) return 0;
+    let lastTs = 0, bad = 0;
+    for (const l of lines) {
+        const m = l.match(/\[(\d+):(\d+(?:\.\d+)?)\]/);
+        if (m) lastTs = Math.max(lastTs, (+m[1]) * 60 + (+m[2]));
+        else bad++;
+    }
+    if (!lastTs) return 0;
+    const coverage = Math.min(1, lastTs / durationSec);
+    const covScore = coverage >= 0.8 ? 1 : coverage * coverage;
+    const lpm = lines.length / (durationSec / 60);
+    const densityScore = lpm < 2 ? 0.2 : lpm > 50 ? 0.4 : 1;
+    const cleanScore = 1 - (bad / lines.length);
+    return covScore * 0.6 + densityScore * 0.2 + cleanScore * 0.2;
+}
+
 async function searchLrcLib(title, artist, album, durationSec, overrideData) {
     if (overrideData && overrideData.lrcId) {
         try {
@@ -223,13 +245,16 @@ async function searchLrcLib(title, artist, album, durationSec, overrideData) {
         return null;
     }
 
+    let exactLyrics = null;
     try {
         const exactRes = await axios.get('https://lrclib.net/api/get', {
             params: { track_name: title, artist_name: artist, album_name: album, duration: Math.round(durationSec) },
             timeout: 2500
         });
-        if (exactRes.data?.syncedLyrics) return exactRes.data.syncedLyrics;
+        if (exactRes.data?.syncedLyrics) exactLyrics = exactRes.data.syncedLyrics;
     } catch (e) {}
+    // A good exact match wins outright; a poor one falls through to search below
+    if (exactLyrics && scoreSyncedLyrics(exactLyrics, durationSec) >= 0.5) return exactLyrics;
 
     const cleanTitle = title.replace(/\b(19|20)\d{2}\b/g, '').replace(/[\(\[].*?[\)\]]/g, '').trim();
     const cleanArtist = artist.trim();
@@ -245,15 +270,21 @@ async function searchLrcLib(title, artist, album, durationSec, overrideData) {
             if (res.data?.length > 0) {
                 const synced = res.data.filter(l => l.syncedLyrics);
                 if (synced.length > 0) {
-                    synced.sort((a, b) => Math.abs((a.duration || 0) - durationSec) - Math.abs((b.duration || 0) - durationSec));
-                    const best = synced[0];
-                    const diff = Math.abs((best.duration || 0) - durationSec);
-                    if (diff <= 15 || (qParams.track_name && diff <= 40)) return best.syncedLyrics;
+                    const scored = synced.map(l => ({
+                        lyrics: l.syncedLyrics,
+                        score: scoreSyncedLyrics(l.syncedLyrics, durationSec),
+                        diff: Math.abs((l.duration || 0) - durationSec),
+                    })).filter(x => x.score > 0.25);
+                    scored.sort((a, b) => (b.score - a.score) || (a.diff - b.diff));
+                    if (scored.length > 0) {
+                        const best = scored[0];
+                        if (best.diff <= 15 || (qParams.track_name && best.diff <= 40)) return best.lyrics;
+                    }
                 }
             }
         } catch (e) {}
     }
-    return null;
+    return exactLyrics; // last resort: the duration-matched version, flaws and all
 }
 
 // Prime the cache for a track. Returns { entry, isNew } so callers can
