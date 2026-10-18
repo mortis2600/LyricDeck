@@ -50,6 +50,12 @@ GET {base}/questions?count=1&categories=spells
       }] }
 ```
 
+## Android app
+
+A standalone lyric-first Android app: it reads what's playing on your phone and fetches synced lyrics directly — no LyricDeck server required. Grant Notification Access on first launch so it can see the current track.
+
+📱 [Download lyricdeck-debug.apk](lyricdeck-debug.apk) (debug build — allow installs from unknown sources)
+
 ## Quick start
 
 ```bash

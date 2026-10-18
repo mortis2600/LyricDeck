@@ -1009,6 +1009,7 @@ app.post('/api/trivia/intermission', (req, res) => {
     res.json({ ok: true, config: getIntermission() });
 });
 app.get('/config', (req, res) => res.sendFile(path.join(__dirname, 'public', 'config.html')));
+app.get('/mobile', (req, res) => res.sendFile(path.join(__dirname, 'public', 'mobile.html')));
 // ---- Trivia question source (OpenTDB or a custom endpoint, e.g. LoreForge) ----
 function getQuestionSource() {
     const c = persisted.triviaQuestionSource || {};
