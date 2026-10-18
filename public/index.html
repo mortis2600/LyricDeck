@@ -221,6 +221,14 @@
 
         #get-ready-banner.active { height: 65px; margin: 10px auto 0 auto; border-width: 2px; border-color: var(--accent-color); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 15px var(--accent-color); }
         #duet-gr-text { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        /* Duet "get ready" karaoke wipe: fills the upcoming line as your part approaches */
+        .lyric-line.duet-wipe { position: relative; }
+        .lyric-line.duet-wipe::after {
+            content: ''; position: absolute; left: 0; top: 2px; bottom: 2px;
+            width: calc(var(--wipe, 0) * 100%);
+            background: linear-gradient(90deg, var(--wipe-color, rgba(34,211,238,0.45)), var(--wipe-color, rgba(34,211,238,0.25)));
+            border-radius: 6px; pointer-events: none;
+        }
         .get-ready-content { display: flex; align-items: center; gap: 20px; width: 85%; opacity: 0; transition: opacity 0.3s ease; }
         #get-ready-banner.active .get-ready-content { opacity: 1; }
         #get-ready-label { color: var(--accent-color); font-weight: 900; font-size: 1.1rem; letter-spacing: 3px; text-transform: uppercase; white-space: nowrap; }
@@ -1772,7 +1780,12 @@
             for (let i = activeIndex + 1; i < parsedLyrics.length; i++) {
                 if (isMyDuetPart(i)) {
                     const wait = parsedLyrics[i].timeMs - nowMs;
-                    if (wait > 0 && wait <= 8000) return { text: parsedLyrics[i].text, inSec: Math.ceil(wait / 1000) };
+                    if (wait > 0 && wait <= 8000) return {
+                        index: i,
+                        text: parsedLyrics[i].text,
+                        inSec: Math.ceil(wait / 1000),
+                        progress: Math.min(1, Math.max(0, 1 - wait / 8000))
+                    };
                     return null;
                 }
             }
@@ -2700,7 +2713,7 @@
                     const countdownFill = document.getElementById('countdown-fill');
                     const upcomingIndex = activeIndex === -1 ? 0 : activeIndex + 1;
 
-                    document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('upcoming-preview'));
+                    document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('upcoming-preview', 'duet-wipe'));
 
                     const duetGr = (!showCountdown && duetMode) ? computeDuetGetReady(estimatedCurrentMs, activeIndex) : null;
 
@@ -2724,9 +2737,16 @@
                         } else if (duetGr) {
                             musicNote.style.opacity = 0;
                             cdOverlay.classList.remove('active');
-                            getReadyBanner.classList.add('active');
-                            setDuetGrText('"' + duetGr.text + '" \u2014 in ' + duetGr.inSec + 's');
+                            getReadyBanner.classList.remove('active');
+                            setDuetGrText(null);
                             upNextWidget.style.opacity = 0;
+                            // karaoke wipe fills the upcoming line as your part approaches
+                            const wipeEl = document.getElementById(`line-${duetGr.index}`);
+                            if (wipeEl) {
+                                wipeEl.classList.add('duet-wipe');
+                                wipeEl.style.setProperty('--wipe', duetGr.progress.toFixed(3));
+                                wipeEl.style.setProperty('--wipe-color', myDuetSinger === 'B' ? 'rgba(244,114,182,0.4)' : 'rgba(34,211,238,0.4)');
+                            }
                         } else if (isLongGap) {
                             setDuetGrText(null);
                             getReadyBanner.classList.remove('active');
