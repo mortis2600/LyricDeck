@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>LyricDeck</title>
+<style>
+  :root { --green: #1DB954; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: #0a0a0a; color: #eee;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+    padding-top: env(safe-area-inset-top);
+  }
+  /* top bar */
+  #topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid #1c1c1c; flex-shrink: 0;
+  }
+  #topbar .brand { font-weight: 800; font-size: 1rem; letter-spacing: .5px; }
+  #topbar .brand span { color: var(--green); }
+  #gear { background: none; border: none; color: #888; font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
+  /* now playing */
+  #np {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid #1c1c1c; flex-shrink: 0;
+  }
+  #np img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: #1a1a1a; flex-shrink: 0; }
+  #np .meta { min-width: 0; flex: 1; }
+  #np .title { font-weight: 700; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np .artist { color: #999; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np .live { color: var(--green); font-size: .7rem; font-weight: 700; letter-spacing: 1px; flex-shrink: 0; }
+  /* lyrics */
+  #lyrics {
+    flex: 1; overflow-y: auto; padding: 24px 20px 40vh;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  }
+  .line {
+    font-size: 1.25rem; line-height: 1.5; color: #555; margin: 0 0 14px;
+    transition: color .25s, transform .25s; font-weight: 500;
+  }
+  .line.active { color: #fff; transform: scale(1.04); transform-origin: left center; font-weight: 700; }
+  .line.past { color: #777; }
+  #empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #666; text-align: center; padding: 0 32px; gap: 10px;
+  }
+  #empty .big { font-size: 2.4rem; }
+  /* setup + settings */
+  .sheet {
+    position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .sheet .box { width: 100%; max-width: 420px; background: #141414; border: 1px solid #2a2a2a; border-radius: 16px; padding: 24px; }
+  .sheet h2 { margin: 0 0 6px; font-size: 1.15rem; }
+  .sheet p { color: #888; font-size: .88rem; margin: 0 0 16px; line-height: 1.5; }
+  .sheet input {
+    width: 100%; background: #0a0a0a; border: 1px solid #333; border-radius: 10px;
+    color: #eee; padding: 13px; font-size: 1rem; margin-bottom: 14px;
+  }
+  .sheet button {
+    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    background: var(--green); color: #000; font-size: 1rem; font-weight: 700; cursor: pointer;
+  }
+  .sheet button.ghost { background: none; color: #888; margin-top: 8px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <div class="brand">Lyric<span>Deck</span></div>
+    <button id="gear" aria-label="Settings">⚙</button>
+  </div>
+  <div id="np" class="hidden">
+    <img id="np-art" alt="">
+    <div class="meta">
+      <div class="title" id="np-title">—</div>
+      <div class="artist" id="np-artist">—</div>
+    </div>
+    <div class="live">● LIVE</div>
+  </div>
+  <div id="lyrics" class="hidden"></div>
+  <div id="empty">
+    <div class="big">🎵</div>
+    <div>Nothing playing right now.<br>Start something on your server and the lyrics will appear here.</div>
+  </div>
+
+  <div id="setup" class="sheet hidden">
+    <div class="box">
+      <h2>Connect to LyricDeck</h2>
+      <p>Enter your LyricDeck server address. You can find it in your server's <b>/config</b> page, or use the Tailscale address.</p>
+      <input id="server-url" type="url" placeholder="https://your-server.ts.net" autocapitalize="off" autocorrect="off">
+      <button id="save-server">Connect</button>
+    </div>
+  </div>
+  <div id="settings" class="sheet hidden">
+    <div class="box">
+      <h2>Settings</h2>
+      <p>LyricDeck server address.</p>
+      <input id="server-url2" type="url" autocapitalize="off" autocorrect="off">
+      <button id="save-server2">Save</button>
+      <button id="close-settings" class="ghost">Cancel</button>
+    </div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+const LS_KEY = 'ld_mobile_server';
+const DEFAULT_SERVER = 'https://plexlyrics.tailf8ec44.ts.net';
+let serverUrl = localStorage.getItem(LS_KEY) || '';
+let lines = [], activeIdx = -1, lastTrackKey = '';
+let lastStateAt = 0, lastOffsetMs = 0;
+
+function api(path) {
+  return fetch(serverUrl.replace(/\/$/, '') + path);
+}
+function parseLRC(lrc) {
+  const out = [];
+  for (const ln of String(lrc || '').split('\n')) {
+    const m = ln.match(/\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+    if (m && m[3].trim()) out.push({ t: (+m[1]) * 60 + (+m[2]), text: m[3].trim() });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+function renderLyrics() {
+  const box = $('lyrics');
+  box.innerHTML = '';
+  lines.forEach((l, i) => {
+    const d = document.createElement('div');
+    d.className = 'line'; d.textContent = l.text; d.id = 'line-' + i;
+    box.appendChild(d);
+  });
+  activeIdx = -1;
+}
+function currentMs() {
+  return lastOffsetMs + (Date.now() - lastStateAt);
+}
+function tick() {
+  requestAnimationFrame(tick);
+  if (!lines.length) return;
+  const t = currentMs() / 1000;
+  let idx = -1;
+  for (let i = 0; i < lines.length; i++) if (lines[i].t <= t) idx = i;
+  if (idx !== activeIdx) {
+    activeIdx = idx;
+    document.querySelectorAll('.line').forEach((el, i) => {
+      el.classList.toggle('active', i === idx);
+      el.classList.toggle('past', i < idx);
+    });
+    const active = $('line-' + idx);
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+async function poll() {
+  if (!serverUrl) return;
+  try {
+    const r = await api('/api/party/state');
+    if (!r.ok) throw new Error('bad');
+    const s = await r.json();
+    lastStateAt = Date.now();
+    if (!s.playing) {
+      $('np').classList.add('hidden');
+      $('lyrics').classList.add('hidden');
+      $('empty').classList.remove('hidden');
+      lines = []; lastTrackKey = '';
+      return;
+    }
+    $('np').classList.remove('hidden');
+    $('empty').classList.add('hidden');
+    $('lyrics').classList.remove('hidden');
+    $('np-title').textContent = s.title || 'Unknown';
+    $('np-artist').textContent = s.artist || '';
+    if (s.thumb) $('np-art').src = serverUrl.replace(/\/$/, '') + s.thumb;
+    lastOffsetMs = s.offsetMs || 0;
+    const key = (s.artist || '') + ' - ' + (s.title || '');
+    if (key !== lastTrackKey) {
+      lastTrackKey = key;
+      lines = parseLRC(s.syncedLyrics);
+      renderLyrics();
+      $('lyrics').scrollTop = 0;
+    }
+  } catch (e) { /* keep last state, retry */ }
+}
+function showSetup() { $('setup').classList.remove('hidden'); }
+function hideSetup() { $('setup').classList.add('hidden'); }
+
+$('save-server').onclick = () => {
+  const v = $('server-url').value.trim().replace(/\/$/, '');
+  if (!v) return;
+  serverUrl = v; localStorage.setItem(LS_KEY, v);
+  hideSetup(); poll();
+};
+$('gear').onclick = () => { $('server-url2').value = serverUrl; $('settings').classList.remove('hidden'); };
+$('close-settings').onclick = () => $('settings').classList.add('hidden');
+$('save-server2').onclick = () => {
+  const v = $('server-url2').value.trim().replace(/\/$/, '');
+  if (!v) return;
+  serverUrl = v; localStorage.setItem(LS_KEY, v);
+  $('settings').classList.add('hidden');
+  lastTrackKey = ''; poll();
+};
+
+// boot
+if (!serverUrl) { showSetup(); }
+else { setInterval(poll, 2000); poll(); requestAnimationFrame(tick); }
+// start loops after setup too
+$('save-server').addEventListener('click', () => {
+  setInterval(poll, 2000); requestAnimationFrame(tick);
+}, { once: true });
+</script>
+</body>
+</html>
